@@ -77,9 +77,7 @@ class SerialManager:
                     dsrdtr=False,
                 )
                 self._connected = True
-                logger.info(
-                    "Connected to scanner on %s at %d baud.", self.port, self.baud
-                )
+                logger.info("Connected to scanner on %s at %d baud.", self.port, self.baud)
                 return True
 
             except serial.SerialException as exc:

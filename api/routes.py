@@ -55,7 +55,6 @@ PRIORITY_MODES = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def get_scanner():
     return current_app.scanner
 
@@ -76,13 +75,11 @@ def error(message: str, status: int = 400, details: str | None = None):
 
 def scanner_required(f):
     """Decorator: return 503 if scanner is not connected."""
-
     @wraps(f)
     def wrapper(*args, **kwargs):
         if not get_scanner().is_connected:
             return error("Scanner is not connected.", status=503)
         return f(*args, **kwargs)
-
     return wrapper
 
 
@@ -90,22 +87,18 @@ def scanner_required(f):
 # Health
 # ---------------------------------------------------------------------------
 
-
 @scanner_bp.get("/health")
 def health():
     """GET /api/health — server and scanner connection status."""
-    return success(
-        {
-            "server": "online",
-            "scanner_connected": get_scanner().is_connected,
-        }
-    )
+    return success({
+        "server": "online",
+        "scanner_connected": get_scanner().is_connected,
+    })
 
 
 # ---------------------------------------------------------------------------
 # Status
 # ---------------------------------------------------------------------------
-
 
 @scanner_bp.get("/status")
 @scanner_required
@@ -117,7 +110,6 @@ def status():
 # ---------------------------------------------------------------------------
 # Key press
 # ---------------------------------------------------------------------------
-
 
 @scanner_bp.post("/key/<key>")
 @scanner_required
@@ -132,7 +124,7 @@ def press_key(key: str):
         return error(
             f"Key '{key}' failed or is not recognised.",
             details="Valid keys: menu, func, scan, hold, search, weather, lockout, "
-            "power, enter, up, down, left, right, 0-9, dot, yes, no",
+                    "power, enter, up, down, left, right, 0-9, dot, yes, no",
         )
     return success(message=f"Key '{key}' sent.")
 
@@ -140,7 +132,6 @@ def press_key(key: str):
 # ---------------------------------------------------------------------------
 # Volume
 # ---------------------------------------------------------------------------
-
 
 @scanner_bp.get("/volume")
 @scanner_required
@@ -165,7 +156,6 @@ def set_volume(level: int):
 # Squelch
 # ---------------------------------------------------------------------------
 
-
 @scanner_bp.get("/squelch")
 @scanner_required
 def get_squelch():
@@ -189,7 +179,6 @@ def set_squelch(level: int):
 # Backlight
 # ---------------------------------------------------------------------------
 
-
 @scanner_bp.get("/backlight")
 @scanner_required
 def get_backlight():
@@ -198,9 +187,7 @@ def get_backlight():
     if info is None:
         return error("Could not read backlight mode.", status=502)
     mode = info.get("backlight", "")
-    return success(
-        {"backlight": mode, "description": BACKLIGHT_MODES.get(mode, "Unknown")}
-    )
+    return success({"backlight": mode, "description": BACKLIGHT_MODES.get(mode, "Unknown")})
 
 
 @scanner_bp.post("/backlight/<mode>")
@@ -216,7 +203,7 @@ def set_backlight(mode: str):
         return error(
             f"Invalid or failed backlight mode '{mode}'.",
             details="Valid: AO (always on), AF (always off), KY, SQ, KS. "
-            "Aliases 'on' and 'off' accepted.",
+                    "Aliases 'on' and 'off' accepted.",
         )
     return success(message=f"Backlight set to {mode.upper()}.")
 
@@ -225,15 +212,12 @@ def set_backlight(mode: str):
 # Channel
 # ---------------------------------------------------------------------------
 
-
 @scanner_bp.get("/channel/<int:ch>")
 @scanner_required
 def get_channel(ch: int):
     """GET /api/channel/<ch> — Fetch info for channel 1-500."""
     if not 1 <= ch <= 500:
-        return error(
-            "Channel out of range.", details="BC125AT supports channels 1–500."
-        )
+        return error("Channel out of range.", details="BC125AT supports channels 1–500.")
     info = get_scanner().get_channel_info(ch)
     if info is None:
         return error(f"Could not retrieve info for channel {ch}.", status=502)
@@ -245,19 +229,17 @@ def get_channel(ch: int):
 def jump_to_channel(ch: int):
     """POST /api/channel/<ch> — Jump to channel 1-500."""
     if not 1 <= ch <= 500:
-        return error(
-            "Channel out of range.", details="BC125AT supports channels 1–500."
-        )
+        return error("Channel out of range.", details="BC125AT supports channels 1–500.")
     ok = get_scanner().jump_to_channel(ch)
     if not ok:
         return error(f"Failed to jump to channel {ch}.")
     return success({"channel": ch}, message=f"Jumped to channel {ch}.")
 
 
+
 # ---------------------------------------------------------------------------
 # Scan groups
 # ---------------------------------------------------------------------------
-
 
 @scanner_bp.get("/groups")
 @scanner_required
@@ -267,14 +249,12 @@ def get_groups():
     if info is None:
         return error("Could not read scan groups.", status=502)
     groups = info.get("groups", [])
-    return success(
-        {
-            "groups": [
-                {"group": i + 1, "scanning": enabled}
-                for i, enabled in enumerate(groups)
-            ]
-        }
-    )
+    return success({
+        "groups": [
+            {"group": i + 1, "scanning": enabled}
+            for i, enabled in enumerate(groups)
+        ]
+    })
 
 
 @scanner_bp.post("/groups")
@@ -299,7 +279,6 @@ def set_groups():
 # ---------------------------------------------------------------------------
 # Priority mode
 # ---------------------------------------------------------------------------
-
 
 @scanner_bp.get("/priority")
 @scanner_required
@@ -331,7 +310,6 @@ def set_priority(mode: str):
 # Scan / Hold
 # ---------------------------------------------------------------------------
 
-
 @scanner_bp.post("/scan")
 @scanner_required
 def start_scan():
@@ -356,7 +334,6 @@ def hold():
 # Power
 # ---------------------------------------------------------------------------
 
-
 @scanner_bp.post("/power/off")
 @scanner_required
 def power_off():
@@ -370,7 +347,6 @@ def power_off():
 # ---------------------------------------------------------------------------
 # Error handlers
 # ---------------------------------------------------------------------------
-
 
 @scanner_bp.errorhandler(404)
 def not_found(e):
