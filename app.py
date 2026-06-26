@@ -12,9 +12,9 @@ import logging
 from flask import Flask, render_template
 from flask_socketio import SocketIO
 
+from api import register_routes
 from config import config
 from scanner import Scanner
-from api import register_routes
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,12 +23,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app     = Flask(__name__)
+app = Flask(__name__)
 app.config["SECRET_KEY"] = config.SECRET_KEY
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
-scanner      = Scanner()
-app.scanner  = scanner
+scanner = Scanner()
+app.scanner = scanner
 
 register_routes(app)
 
