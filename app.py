@@ -12,10 +12,10 @@ import logging
 
 from flask import Flask, render_template
 
-from config import config
-from scanner import Scanner
 from api import register_api
 from api.socket import socketio
+from config import config
+from scanner import Scanner
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,25 +32,29 @@ app.config["SECRET_KEY"] = config.SECRET_KEY
 socketio.init_app(app)
 
 # ── Scanner — single shared instance attached to app ──────────────────────
-scanner     = Scanner()
+scanner = Scanner()
 app.scanner = scanner
 
 # ── Register API blueprints + SocketIO events ─────────────────────────────
 register_api(app)
+
 
 # ── Dashboard route ────────────────────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("index.html")
 
+
 # ── Wire scanner state callback → SocketIO push ───────────────────────────
 def on_scanner_state(state: dict) -> None:
     """Called by the scanner poll thread on every state update."""
     socketio.emit("scanner_state", state)
 
+
 def on_scanner_error(message: str) -> None:
     """Called when the scanner loses connection."""
     socketio.emit("scanner_error", {"message": message})
+
 
 scanner.register_state_callback(on_scanner_state)
 scanner.register_error_callback(on_scanner_error)

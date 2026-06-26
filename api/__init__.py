@@ -5,9 +5,8 @@ Registers the scanner Blueprint and SocketIO event handlers with the app.
 Call register_api(app) from app.py.
 """
 
-from .routes import scanner_bp
 from .events import register_events
-from .socket import socketio
+from .routes import scanner_bp
 
 
 def register_api(app):
