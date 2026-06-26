@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}BC125AT Controller{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+
+  <!-- ── Status display ── -->
+  <section class="panel panel--display">
+    <div class="display-screen">
+      <div class="display-freq" id="display-freq">--- --- MHz</div>
+      <div class="display-meta">
+        <span class="display-channel" id="display-channel">--</span>
+        <span class="display-mod" id="display-mod">--</span>
+      </div>
+      <div class="display-name" id="display-name">&nbsp;</div>
+      <div class="display-icons">
+        <span class="icon-pill" id="icon-squelch">SQ</span>
+        <span class="icon-pill" id="icon-mute">MUTE</span>
+        <span class="icon-pill signal-wrap">
+          <span class="signal-bar" id="sig-1"></span>
+          <span class="signal-bar" id="sig-2"></span>
+          <span class="signal-bar" id="sig-3"></span>
+          <span class="signal-bar" id="sig-4"></span>
+          <span class="signal-bar" id="sig-5"></span>
+        </span>
+        <span class="icon-pill battery-pill">
+          <span class="battery-icon">
+            <span class="battery-fill" id="battery-fill"></span>
+          </span>
+          <span id="battery-volts">--V</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Controls row ── -->
+  <div class="controls-row">
+
+    <!-- Keypad -->
+    <section class="panel panel--keypad">
+      <p class="panel-label">keypad</p>
+      <div class="keypad-grid">
+        <button class="key key--action" data-key="scan">Scan</button>
+        <button class="key key--action" data-key="hold">Hold</button>
+        <button class="key key--action" data-key="search">Search</button>
+        <button class="key key--action" data-key="weather">WX</button>
+
+        <button class="key" data-key="1">1</button>
+        <button class="key" data-key="2">2</button>
+        <button class="key" data-key="3">3</button>
+        <button class="key key--nav" data-key="up">▲</button>
+
+        <button class="key" data-key="4">4</button>
+        <button class="key" data-key="5">5</button>
+        <button class="key" data-key="6">6</button>
+        <button class="key key--nav" data-key="down">▼</button>
+
+        <button class="key" data-key="7">7</button>
+        <button class="key" data-key="8">8</button>
+        <button class="key" data-key="9">9</button>
+        <button class="key key--nav" data-key="lockout">L/O</button>
+
+        <button class="key" data-key="dot">.</button>
+        <button class="key" data-key="0">0</button>
+        <button class="key key--enter" data-key="enter">E</button>
+        <button class="key key--func" data-key="func">Func</button>
+      </div>
+
+      <!-- Channel jump -->
+      <div class="channel-jump">
+        <input type="number" id="channel-input" class="channel-input" min="1" max="500" placeholder="Ch 1–500">
+        <button class="key key--action" id="channel-go">Go</button>
+      </div>
+    </section>
+
+    <!-- Levels -->
+    <section class="panel panel--levels">
+      <p class="panel-label">levels</p>
+
+      <div class="level-group">
+        <div class="level-header">
+          <span class="level-name">Volume</span>
+          <span class="level-value" id="vol-value">--</span>
+        </div>
+        <input type="range" class="level-slider" id="vol-slider" min="0" max="15" value="8" step="1">
+        <div class="level-ticks">
+          <span>0</span><span>5</span><span>10</span><span>15</span>
+        </div>
+      </div>
+
+      <div class="level-group">
+        <div class="level-header">
+          <span class="level-name">Squelch</span>
+          <span class="level-value" id="sql-value">--</span>
+        </div>
+        <input type="range" class="level-slider" id="sql-slider" min="0" max="15" value="3" step="1">
+        <div class="level-ticks">
+          <span>0</span><span>5</span><span>10</span><span>15</span>
+        </div>
+      </div>
+
+      <!-- Backlight -->
+      <div class="level-group">
+        <div class="level-header">
+          <span class="level-name">Backlight</span>
+          <span class="level-value" id="blt-value">--</span>
+        </div>
+        <div class="backlight-btns">
+          <button class="blt-btn" data-mode="AO">Always on</button>
+          <button class="blt-btn" data-mode="SQ">Squelch</button>
+          <button class="blt-btn" data-mode="KY">Keypress</button>
+          <button class="blt-btn" data-mode="AF">Off</button>
+        </div>
+      </div>
+
+      <!-- Activity log -->
+      <div class="level-group log-group">
+        <div class="level-header">
+          <span class="level-name">Activity</span>
+          <button class="log-clear" id="log-clear">Clear</button>
+        </div>
+        <div class="activity-log" id="activity-log">
+          <span class="log-empty">No activity yet</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+{% endblock %}
