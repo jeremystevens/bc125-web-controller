@@ -19,11 +19,12 @@ Protocol notes:
 import logging
 import threading
 import time
-from typing import Callable
+from collections.abc import Callable
+
+from config import config
 
 from . import commands as cmd
 from .serial_manager import SerialManager
-from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -59,18 +60,22 @@ class Scanner:
                 self._mgr.disconnect()
                 return False
 
-            fw_info  = cmd.get_firmware(self._mgr)
+            fw_info = cmd.get_firmware(self._mgr)
             vol_info = cmd.get_volume(self._mgr)
             sql_info = cmd.get_squelch(self._mgr)
             bat_info = cmd.get_battery_voltage(self._mgr)
 
         with self._state_lock:
-            self._state["connected"]     = True
-            self._state["model"]         = model_info.get("model", "Unknown")
-            self._state["firmware"]      = fw_info.get("firmware", "Unknown") if fw_info else "Unknown"
-            self._state["volume"]        = vol_info.get("volume", 0) if vol_info else 0
-            self._state["squelch"]       = sql_info.get("squelch", 0) if sql_info else 0
-            self._state["battery_volts"] = bat_info.get("battery_volts", 0.0) if bat_info else 0.0
+            self._state["connected"] = True
+            self._state["model"] = model_info.get("model", "Unknown")
+            self._state["firmware"] = (
+                fw_info.get("firmware", "Unknown") if fw_info else "Unknown"
+            )
+            self._state["volume"] = vol_info.get("volume", 0) if vol_info else 0
+            self._state["squelch"] = sql_info.get("squelch", 0) if sql_info else 0
+            self._state["battery_volts"] = (
+                bat_info.get("battery_volts", 0.0) if bat_info else 0.0
+            )
 
         logger.info(
             "Scanner ready: %s  Firmware: %s  Battery: %.2fV",
@@ -212,7 +217,9 @@ class Scanner:
                 logger.warning("Connection lost — attempting reconnect...")
                 if self._on_error:
                     try:
-                        self._on_error("Scanner connection lost — attempting to reconnect.")
+                        self._on_error(
+                            "Scanner connection lost — attempting to reconnect."
+                        )
                     except Exception:
                         pass
                 if not self._mgr.reconnect():
@@ -237,26 +244,30 @@ class Scanner:
         """Fetch status, update cached state, fire state callback."""
         with self._cmd_lock:
             status = cmd.get_status(self._mgr)
-            glg    = cmd.get_reception_status(self._mgr)
+            glg = cmd.get_reception_status(self._mgr)
 
         updated: dict = {}
 
         if status:
-            updated.update({
-                "display_line1":   status["display_line1"],
-                "display_line2":   status["display_line2"],
-                "signal_strength": status["signal_strength"],
-                "squelch_open":    status["squelch_open"],
-                "muted":           status["muted"],
-            })
+            updated.update(
+                {
+                    "display_line1": status["display_line1"],
+                    "display_line2": status["display_line2"],
+                    "signal_strength": status["signal_strength"],
+                    "squelch_open": status["squelch_open"],
+                    "muted": status["muted"],
+                }
+            )
 
         if glg:
-            updated.update({
-                "frequency_mhz": glg["frequency_mhz"],
-                "modulation":    glg["modulation"],
-                "channel_id":    glg["channel_id"],
-                "channel_name":  glg["channel_name"],
-            })
+            updated.update(
+                {
+                    "frequency_mhz": glg["frequency_mhz"],
+                    "modulation": glg["modulation"],
+                    "channel_id": glg["channel_id"],
+                    "channel_name": glg["channel_name"],
+                }
+            )
 
         if updated:
             with self._state_lock:
@@ -276,19 +287,19 @@ class Scanner:
     @staticmethod
     def _empty_state() -> dict:
         return {
-            "connected":       False,
-            "model":           "",
-            "firmware":        "",
-            "display_line1":   "",
-            "display_line2":   "",
-            "frequency_mhz":   0.0,
-            "modulation":      "",
-            "channel_id":      0,
-            "channel_name":    "",
+            "connected": False,
+            "model": "",
+            "firmware": "",
+            "display_line1": "",
+            "display_line2": "",
+            "frequency_mhz": 0.0,
+            "modulation": "",
+            "channel_id": 0,
+            "channel_name": "",
             "signal_strength": 0,
-            "squelch_open":    False,
-            "muted":           False,
-            "volume":          0,
-            "squelch":         0,
-            "battery_volts":   0.0,
+            "squelch_open": False,
+            "muted": False,
+            "volume": 0,
+            "squelch": 0,
+            "battery_volts": 0.0,
         }
