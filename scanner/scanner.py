@@ -5,15 +5,17 @@ Wraps SerialManager + commands into a single object that:
   - Connects and verifies scanner identity
   - Maintains a live state dict updated by a background polling thread
   - Uses a command lock to prevent polling colliding with API commands
-  - Fires a state callback on every poll cycle (SocketIO push in app.py)
+  - Fires a state callback on EVERY poll cycle regardless of changes
   - Fires an error callback on connection loss
   - Exposes clean methods for the API layer to call
 
 Protocol notes:
   - VOL and SQL have both GET and SET commands
   - KEY requires single-char codes — see commands.KEY_MAP
-  - Program mode (PRG/EPG) is handled internally by commands that need it
+  - Program mode (PRG/EPG) handled internally by commands that need it
   - Frequencies on the wire are in units of 100 Hz
+  - GLG may return None when scanner is between channels — last known
+    frequency is preserved in state rather than zeroing out
 """
 
 import logging
@@ -110,17 +112,11 @@ class Scanner:
         return self._mgr.is_connected
 
     def register_state_callback(self, callback: Callable[[dict], None]) -> None:
-        """
-        Register a function called on every poll cycle with the full state dict.
-        Used by app.py to push updates via SocketIO.
-        """
+        """Called on every poll cycle — used by app.py to push via SocketIO."""
         self._on_state_change = callback
 
     def register_error_callback(self, callback: Callable[[str], None]) -> None:
-        """
-        Register a function called when the scanner connection is lost.
-        Used by app.py to push a scanner_error event via SocketIO.
-        """
+        """Called on connection loss — used by app.py to push scanner_error."""
         self._on_error = callback
 
     # ------------------------------------------------------------------
@@ -234,40 +230,47 @@ class Scanner:
             time.sleep(config.SCANNER_POLL_INTERVAL)
 
     def _do_poll(self) -> None:
-        """Fetch status, update cached state, fire state callback."""
+        """
+        Fetch status from scanner, update cached state, fire state callback.
+
+        KEY FIX: The callback is fired on EVERY poll cycle, not just when
+        data changes. This ensures the browser display always stays current.
+
+        GLG may return None when the scanner is between channels during
+        active scanning. In that case we preserve the last known frequency
+        rather than zeroing it out, so the display doesn't flicker.
+        """
         with self._cmd_lock:
             status = cmd.get_status(self._mgr)
             glg    = cmd.get_reception_status(self._mgr)
 
-        updated: dict = {}
+        with self._state_lock:
+            if status:
+                self._state["display_line1"]   = status["display_line1"]
+                self._state["display_line2"]   = status["display_line2"]
+                self._state["signal_strength"] = status["signal_strength"]
+                self._state["squelch_open"]    = status["squelch_open"]
+                self._state["muted"]           = status["muted"]
 
-        if status:
-            updated.update({
-                "display_line1":   status["display_line1"],
-                "display_line2":   status["display_line2"],
-                "signal_strength": status["signal_strength"],
-                "squelch_open":    status["squelch_open"],
-                "muted":           status["muted"],
-            })
+            if glg:
+                # Only update frequency fields if GLG returned valid data
+                # (GLG returns None when scanner is between channels)
+                if glg["frequency_mhz"] > 0:
+                    self._state["frequency_mhz"] = glg["frequency_mhz"]
+                    self._state["modulation"]    = glg["modulation"]
+                self._state["channel_id"]   = glg["channel_id"]
+                self._state["channel_name"] = glg["channel_name"]
 
-        if glg:
-            updated.update({
-                "frequency_mhz": glg["frequency_mhz"],
-                "modulation":    glg["modulation"],
-                "channel_id":    glg["channel_id"],
-                "channel_name":  glg["channel_name"],
-            })
+            # Always emit snapshot — even if nothing changed
+            # This keeps the SocketIO connection alive and ensures
+            # the browser display is always in sync
+            snapshot = dict(self._state)
 
-        if updated:
-            with self._state_lock:
-                self._state.update(updated)
-                snapshot = dict(self._state)
-
-            if self._on_state_change:
-                try:
-                    self._on_state_change(snapshot)
-                except Exception as exc:
-                    logger.warning("State callback error: %s", exc)
+        if self._on_state_change:
+            try:
+                self._on_state_change(snapshot)
+            except Exception as exc:
+                logger.warning("State callback error: %s", exc)
 
     # ------------------------------------------------------------------
     # Helpers

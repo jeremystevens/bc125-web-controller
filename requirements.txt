@@ -1,14 +1,19 @@
-# BC125AT Flask Web Controller — Python 3.14+
+# BC125AT Flask Web Controller — Python 3.10+
 
 # Web framework
 flask>=3.1.0
 flask-socketio>=5.4.0
-
-# WebSocket server (used by Flask-SocketIO)
-eventlet>=0.37.0
 
 # Serial communication
 pyserial>=3.5
 
 # Environment / config
 python-dotenv>=1.0.0
+
+# Audio recording (Phase 5)
+sounddevice>=0.4.6
+soundfile>=0.12.1
+
+# NOTE: eventlet is NOT required — async_mode='threading' is used instead.
+# Eventlet 0.37+ has compatibility issues with Flask-SocketIO on Windows.
+# If you have eventlet installed it won't cause problems but isn't needed.

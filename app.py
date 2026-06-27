@@ -1,19 +1,24 @@
 """
 app.py - Application entry point.
 
-Creates the Flask app, binds SocketIO, attaches the shared Scanner
-instance, registers API blueprints and SocketIO events, and serves
-the dashboard.
+async_mode is 'threading' (see api/socket.py) — more stable than
+eventlet on Windows and with recent eventlet versions.
+
+use_reloader=False is required to prevent Flask starting two processes
+which would cause the scanner to connect twice and the SocketIO
+emitter to run in the wrong process.
 
     python app.py
 """
 
 import logging
+from pathlib import Path
 
-from flask import Flask, render_template
+from flask import Flask, render_template, send_from_directory
 
 from config import config
 from scanner import Scanner
+from recorder import Recorder
 from api import register_api
 from api.socket import socketio
 
@@ -28,29 +33,44 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config["SECRET_KEY"] = config.SECRET_KEY
 
-# ── SocketIO — init_app pattern avoids circular imports ───────────────────
+# ── SocketIO ───────────────────────────────────────────────────────────────
 socketio.init_app(app)
 
-# ── Scanner — single shared instance attached to app ──────────────────────
+# ── Scanner ────────────────────────────────────────────────────────────────
 scanner     = Scanner()
 app.scanner = scanner
+
+# ── Recorder ──────────────────────────────────────────────────────────────
+recorder     = Recorder()
+app.recorder = recorder
 
 # ── Register API blueprints + SocketIO events ─────────────────────────────
 register_api(app)
 
-# ── Dashboard route ────────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# ── Wire scanner state callback → SocketIO push ───────────────────────────
+
+@app.route("/recordings/<path:filename>")
+def serve_recording(filename):
+    return send_from_directory(
+        Path(config.RECORDINGS_DIR).resolve(),
+        filename,
+        as_attachment=False,
+    )
+
+
+# ── Wire scanner callbacks → SocketIO push ────────────────────────────────
 def on_scanner_state(state: dict) -> None:
-    """Called by the scanner poll thread on every state update."""
+    state["recorder"] = recorder.status()
     socketio.emit("scanner_state", state)
 
+
 def on_scanner_error(message: str) -> None:
-    """Called when the scanner loses connection."""
     socketio.emit("scanner_error", {"message": message})
+
 
 scanner.register_state_callback(on_scanner_state)
 scanner.register_error_callback(on_scanner_error)
@@ -75,6 +95,8 @@ if __name__ == "__main__":
             host=config.FLASK_HOST,
             port=config.FLASK_PORT,
             debug=config.FLASK_DEBUG,
+            use_reloader=False,    # required — prevents double scanner connect
+            allow_unsafe_werkzeug=True,  # allow Werkzeug in threading mode
         )
     finally:
         scanner.disconnect()

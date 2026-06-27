@@ -30,6 +30,10 @@
           </span>
           <span id="battery-volts">--V</span>
         </span>
+        <span class="icon-pill rec-pill" id="rec-indicator">
+          <span class="rec-dot"></span>
+          REC <span id="rec-timer">0:00</span>
+        </span>
       </div>
     </div>
   </section>
@@ -66,64 +70,95 @@
         <button class="key key--enter" data-key="enter">E</button>
         <button class="key key--func" data-key="func">Func</button>
       </div>
-
-      <!-- Channel jump -->
       <div class="channel-jump">
         <input type="number" id="channel-input" class="channel-input" min="1" max="500" placeholder="Ch 1–500">
         <button class="key key--action" id="channel-go">Go</button>
       </div>
     </section>
 
-    <!-- Levels -->
+    <!-- Right column: levels + recording + log -->
     <section class="panel panel--levels">
-      <p class="panel-label">levels</p>
 
-      <div class="level-group">
-        <div class="level-header">
-          <span class="level-name">Volume</span>
-          <span class="level-value" id="vol-value">--</span>
+      <div class="levels-top">
+
+        <!-- Left side: sliders + backlight -->
+        <div class="levels-left">
+          <p class="panel-label">levels</p>
+
+          <div class="level-group">
+            <div class="level-header">
+              <span class="level-name">Volume</span>
+              <span class="level-value" id="vol-value">--</span>
+            </div>
+            <input type="range" class="level-slider" id="vol-slider" min="0" max="15" value="8" step="1">
+            <div class="level-ticks"><span>0</span><span>5</span><span>10</span><span>15</span></div>
+          </div>
+
+          <div class="level-group">
+            <div class="level-header">
+              <span class="level-name">Squelch</span>
+              <span class="level-value" id="sql-value">--</span>
+            </div>
+            <input type="range" class="level-slider" id="sql-slider" min="0" max="15" value="3" step="1">
+            <div class="level-ticks"><span>0</span><span>5</span><span>10</span><span>15</span></div>
+          </div>
+
+          <div class="level-group">
+            <div class="level-header">
+              <span class="level-name">Backlight</span>
+              <span class="level-value" id="blt-value">--</span>
+            </div>
+            <div class="backlight-btns">
+              <button class="blt-btn" data-mode="AO">Always on</button>
+              <button class="blt-btn" data-mode="SQ">Squelch</button>
+              <button class="blt-btn" data-mode="KY">Keypress</button>
+              <button class="blt-btn" data-mode="AF">Off</button>
+            </div>
+          </div>
         </div>
-        <input type="range" class="level-slider" id="vol-slider" min="0" max="15" value="8" step="1">
-        <div class="level-ticks">
-          <span>0</span><span>5</span><span>10</span><span>15</span>
+
+        <!-- Right side: recording + log -->
+        <div class="levels-right">
+          <p class="panel-label">recording</p>
+
+          <div class="rec-compact">
+            <div class="rec-compact-status">
+              <span class="level-name">Status</span>
+              <span class="level-value rec-status-text" id="rec-status-text">idle</span>
+            </div>
+            <div class="rec-compact-controls">
+              <button class="rec-btn rec-btn--start" id="rec-start">
+                <span class="rec-dot"></span>Record
+              </button>
+              <button class="rec-btn rec-btn--stop" id="rec-stop" disabled>■ Stop</button>
+            </div>
+            <div class="rec-file" id="rec-file">&nbsp;</div>
+          </div>
+
+          <div class="level-group log-group" style="margin-top:12px">
+            <div class="level-header">
+              <span class="level-name">Activity</span>
+              <button class="log-clear" id="log-clear">Clear</button>
+            </div>
+            <div class="activity-log" id="activity-log">
+              <span class="log-empty">No activity yet</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Recordings list — full width inside the panel -->
+      <div class="recordings-section">
+        <div class="recordings-header">
+          <span class="level-name">Recordings</span>
+          <button class="log-clear" id="recordings-refresh">Refresh</button>
+        </div>
+        <div class="recordings-list" id="recordings-list">
+          <span class="log-empty">No recordings yet</span>
         </div>
       </div>
 
-      <div class="level-group">
-        <div class="level-header">
-          <span class="level-name">Squelch</span>
-          <span class="level-value" id="sql-value">--</span>
-        </div>
-        <input type="range" class="level-slider" id="sql-slider" min="0" max="15" value="3" step="1">
-        <div class="level-ticks">
-          <span>0</span><span>5</span><span>10</span><span>15</span>
-        </div>
-      </div>
-
-      <!-- Backlight -->
-      <div class="level-group">
-        <div class="level-header">
-          <span class="level-name">Backlight</span>
-          <span class="level-value" id="blt-value">--</span>
-        </div>
-        <div class="backlight-btns">
-          <button class="blt-btn" data-mode="AO">Always on</button>
-          <button class="blt-btn" data-mode="SQ">Squelch</button>
-          <button class="blt-btn" data-mode="KY">Keypress</button>
-          <button class="blt-btn" data-mode="AF">Off</button>
-        </div>
-      </div>
-
-      <!-- Activity log -->
-      <div class="level-group log-group">
-        <div class="level-header">
-          <span class="level-name">Activity</span>
-          <button class="log-clear" id="log-clear">Clear</button>
-        </div>
-        <div class="activity-log" id="activity-log">
-          <span class="log-empty">No activity yet</span>
-        </div>
-      </div>
     </section>
 
   </div>

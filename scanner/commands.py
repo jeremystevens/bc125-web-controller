@@ -137,26 +137,34 @@ def _send_and_receive(mgr: SerialManager, cmd: str) -> str | None:
 def _parse(response: str | None) -> list[str] | None:
     """
     Parse a raw response string into comma-separated parts, stripping the
-    command echo at index 0 and any trailing empty fields.
+    command echo at index 0 and ONLY trailing empty fields.
+
+    IMPORTANT: Middle empty fields are preserved so field indexing stays
+    correct. e.g. GLG has an empty channel_name field when scanning:
+      "GLG,2640000,AM,0,0,0,0,,0,0" — the empty name must stay in place.
 
     Examples:
-      "VOL,10"        → ["10"]
-      "KEY,OK"        → ["OK"]
-      "BLT,AO,"       → ["AO"]   (trailing comma stripped)
-      "PRG,OK"        → ["OK"]
-      "ERR"           → None
-      "CIN,NG"        → None
+      "VOL,10"                      → ["10"]
+      "KEY,OK"                      → ["OK"]
+      "BLT,AO,"                     → ["AO"]   (trailing empty stripped)
+      "GLG,2640000,AM,0,0,0,0,,0,0" → ["2640000","AM","0","0","0","0","","0","0"]
+      "PRG,OK"                      → ["OK"]
+      "ERR"                         → None
+      "CIN,NG"                      → None
     """
     if not response:
         return None
-    parts = [p for p in response.strip().split(",")]
+    parts = response.strip().split(",")
     if not parts or parts[0] == "ERR":
         logger.warning("Scanner returned ERR: %s", response)
         return None
     if len(parts) < 2:
         return None
-    # Strip trailing empty fields (e.g. BLT,AO, → ['BLT','AO',''] → ['AO'])
-    result = [p for p in parts[1:] if p != '']
+    # Strip command echo (index 0), keep middle fields intact
+    result = parts[1:]
+    # Strip ONLY trailing empty fields (e.g. BLT,AO, → ["AO"])
+    while result and result[-1] == "":
+        result.pop()
     if not result:
         return None
     if result[0] == "NG":

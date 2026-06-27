@@ -94,12 +94,12 @@ function updateBattery(volts) {
 let lastFreq = null;
 
 function applyStatus(d) {
-  /* Frequency */
+  /* Frequency — always update display regardless of whether value changed */
   els.freq.textContent = d.frequency_mhz > 0
     ? d.frequency_mhz.toFixed(4) + ' MHz'
     : '--- --- MHz';
 
-  /* Channel & modulation */
+  /* Channel & modulation — always update */
   els.channel.textContent = d.channel_id > 0 ? `CH ${d.channel_id}` : '--';
   els.mod.textContent     = d.modulation || '--';
   els.name.textContent    = d.channel_name || '\u00a0';
@@ -124,11 +124,13 @@ function applyStatus(d) {
     els.sqlValue.textContent = d.squelch;
   }
 
-  /* Log frequency changes */
+  /* Log frequency changes — always update display, log only on change */
   if (d.frequency_mhz > 0 && d.frequency_mhz !== lastFreq) {
     lastFreq = d.frequency_mhz;
     const name = d.channel_name ? ` · ${d.channel_name}` : '';
     logEntry(`${d.frequency_mhz.toFixed(4)} MHz ${d.modulation}${name}`, 'info');
+  } else if (d.frequency_mhz === 0 && lastFreq !== null) {
+    /* Scanner between channels — keep last frequency displayed, do not zero out */
   }
 }
 
@@ -227,3 +229,155 @@ document.addEventListener('DOMContentLoaded', () => {
     window.startPing();
   }
 });
+
+
+/* ════════════════════════════════════════
+   Phase 5 — Recording controls
+   ════════════════════════════════════════ */
+
+const recEls = {
+  start:      $('rec-start'),
+  stop:       $('rec-stop'),
+  statusText: $('rec-status-text'),
+  indicator:  $('rec-indicator'),
+  timer:      $('rec-timer'),
+  file:       $('rec-file'),
+};
+
+let recTimerInterval = null;
+let recStartEpoch    = null;
+
+/* ── Timer display ── */
+function startRecTimer() {
+  recStartEpoch = Date.now();
+  recTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - recStartEpoch) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = String(elapsed % 60).padStart(2, '0');
+    if (recEls.timer)    recEls.timer.textContent    = `${m}:${s}`;
+  }, 1000);
+}
+
+function stopRecTimer() {
+  clearInterval(recTimerInterval);
+  recTimerInterval = null;
+  recStartEpoch    = null;
+  if (recEls.timer) recEls.timer.textContent = '0:00';
+}
+
+/* ── UI state sync ── */
+function setRecordingUI(recording, tail, filename) {
+  const active = recording || tail;
+
+  recEls.start.disabled = active;
+  recEls.stop.disabled  = !recording;
+  recEls.start.classList.toggle('active', recording);
+
+  // REC pill in display header — uses .active class
+  if (recEls.indicator) {
+    recEls.indicator.classList.toggle('active', active);
+  }
+
+  if (recording) {
+    recEls.statusText.textContent = 'recording';
+    recEls.statusText.className   = 'level-value rec-status-text recording';
+  } else if (tail) {
+    recEls.statusText.textContent = 'tail...';
+    recEls.statusText.className   = 'level-value rec-status-text tail';
+    recEls.stop.disabled          = true;
+  } else {
+    recEls.statusText.textContent = 'idle';
+    recEls.statusText.className   = 'level-value rec-status-text';
+    stopRecTimer();
+  }
+
+  // Show current filename under the buttons
+  if (recEls.file) {
+    recEls.file.textContent = (active && filename) ? filename : ' ';
+  }
+}
+
+/* ── Apply recorder state from server push ── */
+function applyRecorderState(rec) {
+  if (!rec) return;
+  if (rec.recording && !recTimerInterval) startRecTimer();
+  if (!rec.recording && !rec.tail_active) stopRecTimer();
+  setRecordingUI(rec.recording, rec.tail_active, rec.current_file);
+}
+
+/* Hook into applyStatus so socket pushes update the recorder UI too */
+const _origApplyStatus = window.applyStatus;
+window.applyStatus = function(d) {
+  _origApplyStatus(d);
+  if (d.recorder) applyRecorderState(d.recorder);
+};
+
+/* ── Start recording ── */
+recEls.start.addEventListener('click', async () => {
+  const res = await apiFetch('/api/recording/start', 'POST');
+  if (res.success) {
+    startRecTimer();
+    setRecordingUI(true, false, res.data?.file);
+    logEntry(`Recording started → ${res.data?.file || ''}`, 'ok');
+  } else {
+    logEntry(`Record failed — ${res.message}`, 'err');
+  }
+});
+
+/* ── Stop recording ── */
+recEls.stop.addEventListener('click', async () => {
+  const res = await apiFetch('/api/recording/stop', 'POST');
+  if (res.success) {
+    setRecordingUI(false, true, res.data?.file);
+    logEntry(`Recording stopping (tail 3s) → ${res.data?.file || ''}`, 'ok');
+    /* Refresh list after tail completes */
+    setTimeout(loadRecordings, 4000);
+  } else {
+    logEntry(`Stop failed — ${res.message}`, 'err');
+  }
+});
+
+/* ── Recordings list ── */
+async function loadRecordings() {
+  const res = await apiFetch('/api/recordings');
+  const list = $('recordings-list');
+  if (!list) return;
+
+  if (!res.success || !res.data.recordings.length) {
+    list.innerHTML = '<span class="log-empty">No recordings yet</span>';
+    return;
+  }
+
+  list.innerHTML = res.data.recordings.map(r => `
+    <div class="recording-row">
+      <span class="rec-filename" title="${r.filename}">${r.filename}</span>
+      <span class="rec-size">${r.size_kb} KB</span>
+      <span class="rec-date">${r.created}</span>
+      <div class="rec-actions">
+        <a href="${r.url}" target="_blank" download>
+          <button class="rec-action-btn">Download</button>
+        </a>
+        <button class="rec-action-btn delete" data-file="${r.filename}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+
+  /* Wire delete buttons */
+  list.querySelectorAll('.delete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const file = btn.dataset.file;
+      if (!confirm(`Delete ${file}?`)) return;
+      const res = await apiFetch(`/api/recordings/${encodeURIComponent(file)}`, 'DELETE');
+      logEntry(
+        res.success ? `Deleted: ${file}` : `Delete failed — ${res.message}`,
+        res.success ? 'ok' : 'err'
+      );
+      if (res.success) loadRecordings();
+    });
+  });
+}
+
+$('recordings-refresh').addEventListener('click', loadRecordings);
+
+/* Load recordings on boot */
+loadRecordings();

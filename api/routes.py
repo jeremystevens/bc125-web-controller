@@ -362,3 +362,54 @@ def method_not_allowed(e):
 def internal_error(e):
     logger.exception("Unhandled error in API route.")
     return error("Internal server error.", status=500, details=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Recording  (Phase 5)
+# ---------------------------------------------------------------------------
+
+@scanner_bp.get("/recording/status")
+def recording_status():
+    """GET /api/recording/status — current recorder state."""
+    return success(current_app.recorder.status())
+
+
+@scanner_bp.post("/recording/start")
+def recording_start():
+    """
+    POST /api/recording/start — begin recording from default audio input.
+    Captures the current scanner frequency and channel from state.
+    """
+    scanner  = get_scanner()
+    state    = scanner.state if scanner.is_connected else {}
+    result   = current_app.recorder.start(
+        channel_id    = state.get("channel_id", 0),
+        frequency_mhz = state.get("frequency_mhz", 0.0),
+    )
+    status_code = 200 if result["success"] else 409
+    return jsonify({"success": result["success"], "message": result["message"],
+                    "data": {"file": result.get("file")}}), status_code
+
+
+@scanner_bp.post("/recording/stop")
+def recording_stop():
+    """POST /api/recording/stop — stop recording (tail runs before save)."""
+    result = current_app.recorder.stop()
+    status_code = 200 if result["success"] else 409
+    return jsonify({"success": result["success"], "message": result["message"],
+                    "data": {"file": result.get("file")}}), status_code
+
+
+@scanner_bp.get("/recordings")
+def list_recordings():
+    """GET /api/recordings — list all saved recordings, newest first."""
+    return success({"recordings": current_app.recorder.list_recordings()})
+
+
+@scanner_bp.delete("/recordings/<filename>")
+def delete_recording(filename: str):
+    """DELETE /api/recordings/<filename> — delete a recording by filename."""
+    result = current_app.recorder.delete_recording(filename)
+    if not result["success"]:
+        return error(result["message"], status=404)
+    return success(message=result["message"])
