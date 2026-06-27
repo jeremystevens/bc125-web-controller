@@ -22,9 +22,9 @@
 ![Status](https://img.shields.io/badge/Status-Active-4ade80?style=for-the-badge&logoColor=white&labelColor=111315)
 ![PRs](https://img.shields.io/badge/PRs-Welcome-4ade80?style=for-the-badge&logoColor=white&labelColor=111315)
 
-![Python CI](https://img.shields.io/github/actions/workflow/status/yourusername/bc125at-web-controller/python-ci.yml?style=for-the-badge&label=Python%20CI&logo=github-actions&logoColor=white&labelColor=111315&color=4ade80)
-![CodeQL](https://img.shields.io/github/actions/workflow/status/yourusername/bc125at-web-controller/codeql.yml?style=for-the-badge&label=CodeQL&logo=github&logoColor=white&labelColor=111315&color=4ade80)
-![Code Quality](https://img.shields.io/github/actions/workflow/status/yourusername/bc125at-web-controller/lint.yml?style=for-the-badge&label=Code%20Quality&logo=pylint&logoColor=white&labelColor=111315&color=4ade80)
+![Python CI](https://img.shields.io/github/actions/workflow/status/jeremystevens/bc125-web-controller/python-ci.yml?style=for-the-badge&label=Python%20CI&logo=github-actions&logoColor=white&labelColor=111315&color=4ade80)
+![CodeQL](https://img.shields.io/github/actions/workflow/status/jeremystevens/bc125-web-controller/codeql.yml?style=for-the-badge&label=CodeQL&logo=github&logoColor=white&labelColor=111315&color=4ade80)
+![Code Quality](https://img.shields.io/github/actions/workflow/status/jeremystevens/bc125-web-controller/lint.yml?style=for-the-badge&label=Code%20Quality&logo=pylint&logoColor=white&labelColor=111315&color=4ade80)
 ![Dependabot](https://img.shields.io/badge/Dependabot-Enabled-4ade80?style=for-the-badge&logo=dependabot&logoColor=white&labelColor=111315)
 
 </div>
@@ -122,7 +122,7 @@ Built on a **Python + Flask** backend with a **real-time WebSocket** frontend, i
 ### 2 — Clone & install
 
 ```bash
-git clone https://github.com/yourusername/bc125at-web-controller.git
+git clone https://github.com/jeremystevens/bc125-web-controller.git
 cd bc125at-web-controller
 
 python -m venv venv
