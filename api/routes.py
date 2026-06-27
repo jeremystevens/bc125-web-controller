@@ -471,7 +471,9 @@ def get_channels():
     """
     try:
         bank = int(request.args.get("bank", 1))
-    except ValueError, TypeError:
+    except ValueError:
+        bank = 1
+    except TypeError:
         bank = 1
     bank = max(1, min(10, bank))
     start = (bank - 1) * 50 + 1
@@ -624,7 +626,9 @@ def settings_set_serial():
         try:
             val = float(body["poll_interval"])
             updates["SCANNER_POLL_INTERVAL"] = str(round(max(0.2, min(5.0, val)), 1))
-        except ValueError, TypeError:
+        except ValueError:
+            return error("poll_interval must be a number between 0.2 and 5.0.")
+        except TypeError:
             return error("poll_interval must be a number between 0.2 and 5.0.")
 
     # Update or append each key

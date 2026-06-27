@@ -278,7 +278,9 @@ def _ok(response: str | None) -> bool:
 def _safe_int(value: str, default: int = 0) -> int:
     try:
         return int(value.strip())
-    except ValueError, AttributeError:
+    except ValueError:
+        return default
+    except AttributeError:
         return default
 
 
