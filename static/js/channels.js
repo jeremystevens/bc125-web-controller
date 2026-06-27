@@ -210,3 +210,258 @@ if (chEls.loadBtn) {
 
 /* Expose for tabs.js */
 window.loadBank = loadBank;
+
+
+/* ════════════════════════════════════════
+   CSV / SS Progress Bar
+   ════════════════════════════════════════ */
+
+function showCsvProgress(label, pct) {
+  let bar = document.getElementById('csv-progress-container');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'csv-progress-container';
+    bar.className = 'csv-progress-container';
+    bar.innerHTML = `
+      <div class="csv-progress-label" id="csv-progress-label"></div>
+      <div class="csv-progress-wrap">
+        <div class="ch-progress-bar" id="csv-progress-bar"></div>
+      </div>
+      <div class="ch-progress-pct" id="csv-progress-pct"></div>
+    `;
+    // Insert below the toolbar
+    const toolbar = document.querySelector('.ch-toolbar');
+    if (toolbar) toolbar.after(bar);
+  }
+  bar.style.display = 'flex';
+  setCsvProgress(pct, label);
+}
+
+function setCsvProgress(pct, label) {
+  const bar  = document.getElementById('csv-progress-bar');
+  const pctEl = document.getElementById('csv-progress-pct');
+  const lblEl = document.getElementById('csv-progress-label');
+  if (bar)   bar.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+  if (lblEl && label) lblEl.textContent = label;
+}
+
+function hideCsvProgress() {
+  const bar = document.getElementById('csv-progress-container');
+  if (bar) bar.style.display = 'none';
+}
+
+function startFakeProgress(targetPct, intervalMs) {
+  let pct = 0;
+  return setInterval(() => {
+    pct = Math.min(pct + 1.5, targetPct);
+    setCsvProgress(pct);
+  }, intervalMs);
+}
+
+/* ════════════════════════════════════════
+   CSV Export / Import
+   ════════════════════════════════════════ */
+
+const exportBtn  = document.getElementById('ch-export-btn');
+const importInput = document.getElementById('ch-import-input');
+
+/* ── Export ── */
+if (exportBtn) {
+  exportBtn.addEventListener('click', async () => {
+    exportBtn.disabled    = true;
+    exportBtn.textContent = '↓ Exporting…';
+    showCsvProgress('Exporting 500 channels…', 0);
+    if (window.logEntry) logEntry('Exporting all 500 channels — please wait…', 'info');
+
+    // Animate progress while waiting (export is one blocking call)
+    const progInterval = startFakeProgress(90, 600);
+
+    try {
+      const res = await fetch('/api/channels/export');
+      clearInterval(progInterval);
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (window.logEntry) logEntry(`Export failed — ${data.message || res.statusText}`, 'err');
+        hideCsvProgress();
+        return;
+      }
+
+      setCsvProgress(100, 'Download ready');
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'bc125at_channels.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (window.logEntry) logEntry('Export complete — bc125at_channels.csv downloaded', 'ok');
+
+    } catch (e) {
+      clearInterval(progInterval);
+      if (window.logEntry) logEntry(`Export error — ${e.message}`, 'err');
+    } finally {
+      setTimeout(hideCsvProgress, 1500);
+      exportBtn.disabled    = false;
+      exportBtn.textContent = '↓ Export';
+    }
+  });
+}
+
+/* ── Import ── */
+if (importInput) {
+  importInput.addEventListener('change', async () => {
+    const file = importInput.files[0];
+    if (!file) return;
+    importInput.value = '';
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      if (window.logEntry) logEntry('Import failed — file must be a .csv', 'err');
+      return;
+    }
+
+    const confirmed = confirm(
+      `Import "${file.name}"?\n\n` +
+      `This will overwrite channels on the scanner with the data from the CSV.\n` +
+      `Make sure you have a backup export before proceeding.`
+    );
+    if (!confirmed) return;
+
+    const label = document.querySelector('.ch-import-label');
+    if (label) label.textContent = '↑ Importing…';
+    showCsvProgress('Importing channels…', 0);
+    if (window.logEntry) logEntry(`Importing ${file.name}…`, 'info');
+
+    const progInterval = startFakeProgress(90, 500);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res  = await fetch('/api/channels/import', { method: 'POST', body: formData });
+      const data = await res.json();
+      clearInterval(progInterval);
+
+      if (data.success) {
+        const { written, skipped, errors } = data.data;
+        setCsvProgress(100, `${written} written`);
+        if (window.logEntry) {
+          logEntry(`Import complete — ${written} written, ${skipped} skipped`, 'ok');
+          if (errors && errors.length) {
+            errors.slice(0, 5).forEach(e => logEntry(`  ${e}`, 'err'));
+            if (errors.length > 5) logEntry(`  …and ${errors.length - 5} more errors`, 'err');
+          }
+        }
+        loadBank(chState.currentBank);
+      } else {
+        if (window.logEntry) logEntry(`Import failed — ${data.message}`, 'err');
+        if (data.details && window.logEntry) logEntry(`  ${data.details}`, 'err');
+      }
+    } catch (e) {
+      clearInterval(progInterval);
+      if (window.logEntry) logEntry(`Import error — ${e.message}`, 'err');
+    } finally {
+      setTimeout(hideCsvProgress, 1500);
+      if (label) label.textContent = '↑ Import';
+    }
+  });
+}
+
+
+/* ── .bc125at_ss Export ── */
+const exportSsBtn = document.getElementById('ch-export-ss-btn');
+if (exportSsBtn) {
+  exportSsBtn.addEventListener('click', async () => {
+    exportSsBtn.disabled    = true;
+    exportSsBtn.textContent = '↓ Exporting…';
+    showCsvProgress('Exporting 500 channels as .bc125at_ss…', 0);
+    if (window.logEntry) logEntry('Exporting as .bc125at_ss — please wait…', 'info');
+
+    const progInterval = startFakeProgress(90, 600);
+
+    try {
+      const res = await fetch('/api/channels/export/ss');
+      clearInterval(progInterval);
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (window.logEntry) logEntry(`Export failed — ${data.message || res.statusText}`, 'err');
+        hideCsvProgress();
+        return;
+      }
+      setCsvProgress(100, 'Download ready');
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'bc125at_channels.bc125at_ss';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (window.logEntry) logEntry('Export complete — bc125at_channels.bc125at_ss downloaded', 'ok');
+    } catch (e) {
+      clearInterval(progInterval);
+      if (window.logEntry) logEntry(`Export error — ${e.message}`, 'err');
+    } finally {
+      setTimeout(hideCsvProgress, 1500);
+      exportSsBtn.disabled    = false;
+      exportSsBtn.textContent = '↓ Export';
+    }
+  });
+}
+
+/* ── .bc125at_ss Import ── */
+const importSsInput = document.getElementById('ch-import-ss-input');
+if (importSsInput) {
+  importSsInput.addEventListener('change', async () => {
+    const file = importSsInput.files[0];
+    if (!file) return;
+    importSsInput.value = '';
+
+    const confirmed = confirm(
+      `Import "${file.name}"?\n\n` +
+      `This will overwrite channels on the scanner with data from the .bc125at_ss file.\n` +
+      `Make sure you have a backup before proceeding.`
+    );
+    if (!confirmed) return;
+
+    const ssLabel = document.querySelectorAll('.ch-format-group')[1]?.querySelector('.ch-import-label');
+    if (ssLabel) ssLabel.textContent = '↑ Importing…';
+    showCsvProgress('Importing .bc125at_ss channels…', 0);
+    if (window.logEntry) logEntry(`Importing ${file.name}…`, 'info');
+
+    const progInterval = startFakeProgress(90, 500);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res  = await fetch('/api/channels/import/ss', { method: 'POST', body: formData });
+      const data = await res.json();
+      clearInterval(progInterval);
+
+      if (data.success) {
+        const { written, skipped, errors } = data.data;
+        setCsvProgress(100, `${written} written`);
+        if (window.logEntry) {
+          logEntry(`Import complete — ${written} written, ${skipped} skipped`, 'ok');
+          if (errors && errors.length) {
+            errors.slice(0, 5).forEach(e => logEntry(`  ${e}`, 'err'));
+            if (errors.length > 5) logEntry(`  …and ${errors.length - 5} more errors`, 'err');
+          }
+        }
+        loadBank(chState.currentBank);
+      } else {
+        if (window.logEntry) logEntry(`Import failed — ${data.message}`, 'err');
+      }
+    } catch (e) {
+      clearInterval(progInterval);
+      if (window.logEntry) logEntry(`Import error — ${e.message}`, 'err');
+    } finally {
+      setTimeout(hideCsvProgress, 1500);
+      if (ssLabel) ssLabel.textContent = '↑ Import';
+    }
+  });
+}

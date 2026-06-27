@@ -136,6 +136,8 @@ function applyStatus(d) {
 
 /* Expose globally so socket.js can call it */
 window.applyStatus = applyStatus;
+
+
 window.logEntry    = logEntry;
 
 /* ── Keypad ── */
@@ -224,6 +226,16 @@ loadBacklight();
 
 /* Initialise SocketIO — defined in socket.js loaded after this file */
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialise themes
+  if (window.Themes) window.Themes.init();
+
+  // Initialise keyboard shortcuts
+  if (window.Shortcuts) window.Shortcuts.init();
+
+  // Initialise notifications
+  if (window.Notifs) window.Notifs.init();
+
+  // Initialise SocketIO
   if (window.initSocket) {
     window.initSocket();
     window.startPing();

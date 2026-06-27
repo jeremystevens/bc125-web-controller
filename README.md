@@ -22,9 +22,9 @@
 ![Status](https://img.shields.io/badge/Status-Active-4ade80?style=for-the-badge&logoColor=white&labelColor=111315)
 ![PRs](https://img.shields.io/badge/PRs-Welcome-4ade80?style=for-the-badge&logoColor=white&labelColor=111315)
 
-![Python CI](https://img.shields.io/github/actions/workflow/status/jeremystevens/bc125-web-controller/python-ci.yml?style=for-the-badge&label=Python%20CI&logo=github-actions&logoColor=white&labelColor=111315&color=4ade80)
-![CodeQL](https://img.shields.io/github/actions/workflow/status/jeremystevens/bc125-web-controller/codeql.yml?style=for-the-badge&label=CodeQL&logo=github&logoColor=white&labelColor=111315&color=4ade80)
-![Code Quality](https://img.shields.io/github/actions/workflow/status/jeremystevens/bc125-web-controller/lint.yml?style=for-the-badge&label=Code%20Quality&logo=pylint&logoColor=white&labelColor=111315&color=4ade80)
+![Python CI](https://img.shields.io/github/actions/workflow/status/yourusername/bc125at-web-controller/python-ci.yml?style=for-the-badge&label=Python%20CI&logo=github-actions&logoColor=white&labelColor=111315&color=4ade80)
+![CodeQL](https://img.shields.io/github/actions/workflow/status/yourusername/bc125at-web-controller/codeql.yml?style=for-the-badge&label=CodeQL&logo=github&logoColor=white&labelColor=111315&color=4ade80)
+![Code Quality](https://img.shields.io/github/actions/workflow/status/yourusername/bc125at-web-controller/lint.yml?style=for-the-badge&label=Code%20Quality&logo=pylint&logoColor=white&labelColor=111315&color=4ade80)
 ![Dependabot](https://img.shields.io/badge/Dependabot-Enabled-4ade80?style=for-the-badge&logo=dependabot&logoColor=white&labelColor=111315)
 
 </div>
@@ -92,6 +92,11 @@ Built on a **Python + Flask** backend with a **real-time WebSocket** frontend, i
 ◆  Settings page — serial port, poll interval, scan groups, priority mode
 ◆  REST API — every feature accessible as a clean JSON endpoint (24+ endpoints)
 ◆  WebSocket push updates — zero-latency live display
+◆  Browser notifications — desktop alerts on active transmissions
+◆  Five radio-inspired themes — Nightwatch · Amber Alert · Navy Ops · Phosphor · Daylight
+◆  Mobile responsive layout — works on phones, tablets, and desktops
+◆  CSV export/import — back up and restore all 500 channels
+◆  Native .bc125at_ss export/import — compatible with the official Uniden software
 ◆  Modular architecture — built to expand
 ```
 
@@ -105,7 +110,7 @@ Built on a **Python + Flask** backend with a **real-time WebSocket** frontend, i
 | Serial comms | pySerial |
 | Real-time | WebSockets (threading mode — stable on Windows) |
 | Audio recording | sounddevice · soundfile |
-| Frontend | Vanilla HTML5 · CSS3 · JavaScript (no framework) |
+| Frontend | Vanilla HTML5 · CSS3 · JavaScript (no framework) · responsive at 1024/600/380px |
 | Config | python-dotenv |
 | Platform | Windows (COM port) · Linux (/dev/ttyACM0) |
 
@@ -122,7 +127,7 @@ Built on a **Python + Flask** backend with a **real-time WebSocket** frontend, i
 ### 2 — Clone & install
 
 ```bash
-git clone https://github.com/jeremystevens/bc125-web-controller.git
+git clone https://github.com/yourusername/bc125at-web-controller.git
 cd bc125at-web-controller
 
 python -m venv venv
@@ -202,6 +207,8 @@ All endpoints return a consistent JSON envelope:
 | `POST` | `/api/scan` | Resume scanning |
 | `POST` | `/api/hold` | Hold on current channel |
 | `POST` | `/api/power/off` | Power off scanner |
+| `GET` | `/api/channels/export` | Export all 500 channels as CSV |
+| `POST` | `/api/channels/import` | Import channels from CSV file |
 
 ### Channels
 
@@ -282,7 +289,9 @@ bc125-controller/
 │       ├── socket.js          ← SocketIO client · live push updates
 │       ├── tabs.js            ← Tab switching · lazy loading
 │       ├── channels.js        ← Channel manager · edit modal
-│       └── settings.js        ← Settings page · scan groups · priority
+│       ├── settings.js        ← Settings page · scan groups · priority
+│       ├── notifications.js   ← Browser notifications · permission · toggle
+│       └── themes.js          ← Theme switcher · 5 radio-inspired themes
 │
 ├── recordings/                ← Audio capture output (.wav files)
 └── docs/img/                  ← Screenshots for README
@@ -325,15 +334,15 @@ bc125-controller/
 ### Future
 
 ```
-◇  Channel Memory Editor          — import/export channel banks as CSV/JSON
+◇  ~~Channel Memory Editor~~          — ✅ shipped in v0.7.0 (CSV export/import)
 ◇  Favorites Manager              — tag and group channels across banks
 ◇  Search Range Programming       — configure custom search ranges in-browser
 ◇  Discovery Mode                 — log and display all active frequencies
 ◇  Scanner Audio Streaming        — stream scanner audio to the browser tab
 ◇  Session Recording              — auto-record entire sessions with activity index
-◇  Browser Notifications          — desktop alerts on active transmissions
-◇  Mobile Responsive Layout       — full touch-friendly mobile UI
-◇  Theme Support                  — light mode and custom accent colours
+◇  ~~Browser Notifications~~          — ✅ shipped in v0.6.2
+◇  ~~Mobile Responsive Layout~~       — ✅ shipped in v0.6.4 (3 breakpoints + touch targets)
+◇  ~~Theme Support~~                  — ✅ shipped in v0.6.3 (5 radio-inspired themes)
 ◇  Multi-scanner Support          — manage more than one scanner from one UI
 ```
 

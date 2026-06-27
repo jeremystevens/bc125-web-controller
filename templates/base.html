@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#111315">
   <title>{% block title %}BC125AT Controller{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   {% block head %}{% endblock %}
@@ -23,6 +27,7 @@
         <button class="tab-btn" data-tab="settings">Settings</button>
       </nav>
       <div class="header-right">
+        <button class="notif-btn" id="notif-toggle" title="Enable notifications">🔕</button>
         <span class="header-status" id="connection-status">connecting...</span>
       </div>
     </div>
@@ -45,6 +50,10 @@
     </div>
   </main>
 
+  <!-- Load order matters: themes first (prevents flash), then notifications, then main -->
+  <script src="{{ url_for('static', filename='js/themes.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/shortcuts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
   <script src="{{ url_for('static', filename='js/socket.js') }}"></script>

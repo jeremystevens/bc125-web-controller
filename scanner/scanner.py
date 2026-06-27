@@ -21,12 +21,11 @@ Protocol notes:
 import logging
 import threading
 import time
-from collections.abc import Callable
-
-from config import config
+from typing import Callable
 
 from . import commands as cmd
 from .serial_manager import SerialManager
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -62,22 +61,18 @@ class Scanner:
                 self._mgr.disconnect()
                 return False
 
-            fw_info = cmd.get_firmware(self._mgr)
+            fw_info  = cmd.get_firmware(self._mgr)
             vol_info = cmd.get_volume(self._mgr)
             sql_info = cmd.get_squelch(self._mgr)
             bat_info = cmd.get_battery_voltage(self._mgr)
 
         with self._state_lock:
-            self._state["connected"] = True
-            self._state["model"] = model_info.get("model", "Unknown")
-            self._state["firmware"] = (
-                fw_info.get("firmware", "Unknown") if fw_info else "Unknown"
-            )
-            self._state["volume"] = vol_info.get("volume", 0) if vol_info else 0
-            self._state["squelch"] = sql_info.get("squelch", 0) if sql_info else 0
-            self._state["battery_volts"] = (
-                bat_info.get("battery_volts", 0.0) if bat_info else 0.0
-            )
+            self._state["connected"]     = True
+            self._state["model"]         = model_info.get("model", "Unknown")
+            self._state["firmware"]      = fw_info.get("firmware", "Unknown") if fw_info else "Unknown"
+            self._state["volume"]        = vol_info.get("volume", 0) if vol_info else 0
+            self._state["squelch"]       = sql_info.get("squelch", 0) if sql_info else 0
+            self._state["battery_volts"] = bat_info.get("battery_volts", 0.0) if bat_info else 0.0
 
         logger.info(
             "Scanner ready: %s  Firmware: %s  Battery: %.2fV",
@@ -184,6 +179,42 @@ class Scanner:
             if was_polling:
                 self._start_polling()
 
+    def get_all_channels_bulk(self) -> list[dict]:
+        """
+        Fetch all 500 channels in a single program mode session.
+        Faster than calling get_channels_bulk() 10 times — only one
+        PRG/EPG pair for the entire operation.
+        """
+        was_polling = self._polling
+        if was_polling:
+            self._stop_polling()
+        try:
+            with self._cmd_lock:
+                return cmd.get_all_channels_bulk(self._mgr)
+        finally:
+            if was_polling:
+                self._start_polling()
+
+    def set_channels_bulk(
+        self,
+        channels: list[dict],
+        on_progress=None,
+    ) -> tuple[int, int, list[str]]:
+        """
+        Write multiple channels in a single program mode session.
+        Faster than individual set_channel() calls — only one
+        PRG/EPG pair for the entire batch.
+        """
+        was_polling = self._polling
+        if was_polling:
+            self._stop_polling()
+        try:
+            with self._cmd_lock:
+                return cmd.set_channels_bulk(self._mgr, channels, on_progress)
+        finally:
+            if was_polling:
+                self._start_polling()
+
     def get_scan_groups(self) -> dict | None:
         with self._cmd_lock:
             return cmd.get_scan_groups(self._mgr)
@@ -233,9 +264,7 @@ class Scanner:
                 logger.warning("Connection lost — attempting reconnect...")
                 if self._on_error:
                     try:
-                        self._on_error(
-                            "Scanner connection lost — attempting to reconnect."
-                        )
+                        self._on_error("Scanner connection lost — attempting to reconnect.")
                     except Exception:
                         pass
                 if not self._mgr.reconnect():
@@ -269,23 +298,23 @@ class Scanner:
         """
         with self._cmd_lock:
             status = cmd.get_status(self._mgr)
-            glg = cmd.get_reception_status(self._mgr)
+            glg    = cmd.get_reception_status(self._mgr)
 
         with self._state_lock:
             if status:
-                self._state["display_line1"] = status["display_line1"]
-                self._state["display_line2"] = status["display_line2"]
+                self._state["display_line1"]   = status["display_line1"]
+                self._state["display_line2"]   = status["display_line2"]
                 self._state["signal_strength"] = status["signal_strength"]
-                self._state["squelch_open"] = status["squelch_open"]
-                self._state["muted"] = status["muted"]
+                self._state["squelch_open"]    = status["squelch_open"]
+                self._state["muted"]           = status["muted"]
 
             if glg:
                 # Only update frequency fields if GLG returned valid data
                 # (GLG returns None when scanner is between channels)
                 if glg["frequency_mhz"] > 0:
                     self._state["frequency_mhz"] = glg["frequency_mhz"]
-                    self._state["modulation"] = glg["modulation"]
-                self._state["channel_id"] = glg["channel_id"]
+                    self._state["modulation"]    = glg["modulation"]
+                self._state["channel_id"]   = glg["channel_id"]
                 self._state["channel_name"] = glg["channel_name"]
 
             # Always emit snapshot — even if nothing changed
@@ -306,19 +335,19 @@ class Scanner:
     @staticmethod
     def _empty_state() -> dict:
         return {
-            "connected": False,
-            "model": "",
-            "firmware": "",
-            "display_line1": "",
-            "display_line2": "",
-            "frequency_mhz": 0.0,
-            "modulation": "",
-            "channel_id": 0,
-            "channel_name": "",
+            "connected":       False,
+            "model":           "",
+            "firmware":        "",
+            "display_line1":   "",
+            "display_line2":   "",
+            "frequency_mhz":   0.0,
+            "modulation":      "",
+            "channel_id":      0,
+            "channel_name":    "",
             "signal_strength": 0,
-            "squelch_open": False,
-            "muted": False,
-            "volume": 0,
-            "squelch": 0,
-            "battery_volts": 0.0,
+            "squelch_open":    False,
+            "muted":           False,
+            "volume":          0,
+            "squelch":         0,
+            "battery_volts":   0.0,
         }

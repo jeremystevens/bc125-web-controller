@@ -7,6 +7,462 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.7.5] — KEY Command Protocol Fix
+
+### Fixed
+
+#### "Key 'down' failed" and "Key 'weather' failed" errors
+
+**Root cause:** The BC125AT serial protocol only supports a specific set of
+KEY command codes, documented in the `AVAILABLE_KEYS` list from the bearcat
+library and the official BC125AT PC Protocol V1.01:
+
+```
+< ^ > H 1 2 3 S 4 5 6 R 7 8 9 L E 0 . P F
+```
+
+The following key codes we had in `KEY_MAP` are **not valid** on the BC125AT
+— the scanner returns `NG` (not acknowledged) for all of them:
+
+| Friendly name | Code | Status |
+|---|---|---|
+| `weather` | `W` | ❌ Not a valid BC125AT KEY code |
+| `down` | `v` | ❌ Not a valid BC125AT KEY code |
+| `menu` | `M` | ❌ Not a valid BC125AT KEY code |
+| `no` | `N` | ❌ Not a valid BC125AT KEY code |
+| `yes` | `Y` | ❌ Not a valid BC125AT KEY code |
+
+Weather (WX) and Down (▼) can only be operated physically on the scanner —
+there is no serial command to trigger them remotely.
+
+### Changed
+- `scanner/commands.py` — `KEY_MAP` cleaned up: `menu`, `weather`, `down`,
+  `no`, `yes` removed. All remaining codes verified against `AVAILABLE_KEYS`.
+  Comment added documenting valid vs invalid codes.
+- `static/js/shortcuts.js` — `weather` (`W`) and `down` (`↓`) shortcuts
+  removed. Navigate group now shows Up / Left / Right only.
+- `templates/index.html` — WX and ▼ keypad buttons marked with
+  `.key--unsupported` class and tooltip explaining they are not supported
+  via serial
+- `static/css/style.css` — `.key--unsupported` style: reduced opacity,
+  `cursor: not-allowed`, hover/active effects disabled
+- `api/routes.py` — error message for unknown key updated to list only
+  valid BC125AT KEY codes
+
+---
+
+## [0.7.4] — Keyboard Shortcuts Bug Fix
+
+### Fixed
+
+#### Most shortcuts did not fire
+
+**Root cause 1 — Case sensitivity:** `e.key` in browser `keydown` events is
+case-sensitive. When a user presses `S` without Caps Lock, `e.key` is `'s'`
+(lowercase). The shortcuts were registered with `'S'` (uppercase), so they
+only fired when Shift was held. Numbers (`'0'`–`'9'`), dot (`'.'`), and arrow
+keys (`'ArrowUp'` etc.) happened to work because those are always the same
+case — which is why only those worked.
+
+**Fix:** All letter keys are now stored lowercase in the definition table and
+matched via `e.key.toLowerCase()`. A `LOOKUP` map (keyed by lowercased string)
+replaces the `Array.find()` for O(1) dispatch. Arrow keys are also lowercased
+(`'arrowup'` etc.) for consistency.
+
+**Root cause 2 — Search key missing:** The `R` / `search` shortcut was
+omitted from the shortcuts table entirely.
+
+**Fix:** `{ key: 'r', label: 'R', description: 'Search', action: pressKey('search') }`
+added to the Scanner group.
+
+### Changed
+- `static/js/shortcuts.js` — complete rewrite of shortcut definitions and key
+  handler; all letter keys lowercased; `LOOKUP` map replaces `Array.find()`;
+  `search` shortcut added; overlay footer note updated
+
+---
+
+## [0.7.3] — Keyboard Shortcuts
+
+### Added
+- `static/js/shortcuts.js` — self-contained keyboard shortcut module
+- `?` help button in the page header (monospace, green on hover) — opens the shortcut reference overlay
+- Keyboard shortcut reference overlay — press `?` anywhere to open, `?` or `Esc` to close
+
+#### Shortcuts
+
+| Key | Action | Group |
+|---|---|---|
+| `S` | Scan | Scanner |
+| `H` | Hold | Scanner |
+| `W` | Weather (WX) | Scanner |
+| `L` | Lockout | Scanner |
+| `F` | Func | Scanner |
+| `E` | Enter | Scanner |
+| `0`–`9` | Number keys | Keypad |
+| `.` | Dot | Keypad |
+| `↑ ↓ ← →` | Navigation | Navigate |
+| `Esc` | Close overlay / clear channel input | UI |
+| `?` | Show / hide shortcut help | UI |
+
+#### Safety guards — shortcuts only fire when:
+- The Dashboard tab is active (shortcuts don't accidentally fire on Channels or Settings)
+- Focus is not inside an input, textarea, or select element
+- No modifier key is held (Ctrl, Alt, Meta) — browser shortcuts preserved
+
+#### Overlay design
+- Shortcuts grouped into four sections: Scanner · Keypad · Navigate · UI
+- Two-column grid layout on desktop, single column on mobile
+- Bottom-sheet style on mobile (slides up from screen edge)
+- `kbd` elements styled with green text, dark background, raised border — matches the radio panel aesthetic
+- Backdrop blur keeps context visible behind the overlay
+- Clicking outside the modal closes it
+
+#### Visual feedback
+- Pressing a shortcut flashes the corresponding keypad button on screen
+- Activity log entry written for every shortcut key press
+
+### Changed
+- `templates/base.html` — `shortcuts.js` added to script load order (position 2, before `notifications.js`); `?` help button injected into header by `shortcuts.js` at init
+- `static/js/main.js` — `Shortcuts.init()` added to `DOMContentLoaded` handler
+- `static/css/style.css` — `.shortcuts-help-btn`, `.shortcuts-overlay`, `.shortcuts-modal`, `.shortcuts-body`, `.shortcuts-group`, `.shortcuts-row`, `.shortcuts-desc`, `kbd`, `.shortcuts-kbd`, `.shortcuts-footer` styles added; mobile bottom-sheet override added
+
+---
+
+## [0.7.2] — Import/Export Performance & Progress Indicators
+
+### Added
+
+#### Progress bar for all four import/export operations
+- Animated green progress bar appears below the channel toolbar during any
+  export or import operation — same visual style as the bank load progress bar
+- Label shows what operation is running (e.g. "Exporting 500 channels…")
+- Simulated progress advances to 90% while the server works, then snaps to
+  100% with a status label when complete ("Download ready" / "N written")
+- Progress bar auto-hides 1.5 seconds after completion
+- `showCsvProgress()`, `setCsvProgress()`, `hideCsvProgress()`,
+  `startFakeProgress()` helper functions added to `channels.js`
+- `.csv-progress-container` CSS block added to `style.css`
+
+### Changed
+
+#### Single program mode session for all 500-channel operations
+All four export/import endpoints now use new bulk commands that open program
+mode once and keep it open for the entire operation, rather than entering and
+exiting for each bank or each channel.
+
+**`scanner/commands.py`** — two new functions:
+- `get_all_channels_bulk(mgr)` — reads all 500 channels in a single PRG/EPG
+  session. Replaces 10 separate `get_channels_bulk()` calls (10 PRG/EPG pairs)
+  with one. Each CIN uses `BULK_CIN_TIMEOUT` (0.5s) and 10ms poll interval.
+- `set_channels_bulk(mgr, channels, on_progress)` — writes a list of channels
+  in a single PRG/EPG session. Replaces N individual `set_channel()` calls.
+  Accepts optional `on_progress(written, total)` callback.
+
+**`scanner/scanner.py`** — two new methods mirroring the above, both pause the
+background poll thread for the duration to avoid serial contention.
+
+**`api/routes.py`** — all four endpoints updated:
+- `GET /api/channels/export` — now calls `get_all_channels_bulk()`
+- `POST /api/channels/import` — validates all rows first, then calls
+  `set_channels_bulk()` in one session
+- `GET /api/channels/export/ss` — now calls `get_all_channels_bulk()`
+- `POST /api/channels/import/ss` — validates all rows first, then calls
+  `set_channels_bulk()` in one session
+
+### Performance improvement estimate
+| Operation | Before | After |
+|---|---|---|
+| Export (500 channels) | ~30s (10 PRG/EPG) | ~25s (1 PRG/EPG) |
+| Import (500 channels) | ~100s (500 PRG/EPG) | ~52s (1 PRG/EPG) |
+| Import (partial file) | proportional | proportional |
+
+The import improvement is the most significant — removing 499 unnecessary
+PRG/EPG round-trips cuts import time roughly in half.
+
+---
+
+## [0.7.1] — Native Uniden .bc125at_ss Format Support
+
+### Added
+
+#### Export (GET /api/channels/export/ss)
+- Exports all 500 channels as a `.bc125at_ss` file — the native format used
+  by the official Uniden BC125AT programming software
+- Output is tab-delimited with `Conventional` bank headers and `C-Freq` channel
+  lines matching the exact format the Uniden software reads and writes
+- CTCSS values preserved as-is (e.g. `C114.8`); `"0"` converted back to `"Off"`
+- Boolean fields written as `On`/`Off` per the Uniden spec
+- File opens directly in the official Uniden BC125AT software
+
+#### Import (POST /api/channels/import/ss)
+- Accepts a `.bc125at_ss` file upload and writes channels to the scanner
+- Parses only `C-Freq` lines — all other record types (Misc, Priority, WxPri,
+  Service, Custom, CloseCall, etc.) are silently ignored
+- `Auto` modulation mapped to `FM` (Uniden uses `Auto` for auto-detect)
+- CTCSS `Off` mapped to `0` for internal representation
+- Same validation and error reporting as CSV import
+
+#### UI — Channels tab toolbar
+- Two format groups now visible in the toolbar: **CSV** and **.bc125at_ss**
+- Each group has its own Export and Import buttons with a format label above
+- Import shows a confirmation dialog before writing to the scanner
+- Activity log reports written/skipped counts and any per-channel errors
+
+### Changed
+- `api/routes.py` — `_parse_bc125at_ss()` and `_build_bc125at_ss()` helper
+  functions added; two new endpoints appended
+- `templates/index.html` — toolbar redesigned with two `ch-format-group`
+  divs each containing a label, export button, and import file picker
+- `static/js/channels.js` — SS export fetch handler and SS import FormData
+  handler appended
+- `static/css/style.css` — `.ch-format-group` and `.ch-format-label` styles
+  added; mobile stacking updated
+
+### .bc125at_ss format reference
+```
+Conventional\t1\tBank 1\tOff
+C-Freq\t1\tRCPD Disp\t483412500\tFM\tOff\tOff\t2\tOff
+C-Freq\t2\tAtherton PD\t489087500\tFM\tOff\tOff\t2\tOff
+C-Freq\t3\tBelmont PD 1\t488487500\tFM\tC162.2\tOff\t2\tOff
+```
+Columns: `C-Freq  channel  name  freq_hz  modulation  ctcss  locked_out  delay  priority`
+
+---
+
+## [0.7.0] — CSV Channel Export & Import
+
+### Added
+
+#### Export (GET /api/channels/export)
+- Downloads all 500 channels as `bc125at_channels.csv` directly to the browser
+- Fetches all 10 banks sequentially in one operation using the optimised
+  `get_channels_bulk()` — single PRG/EPG session per bank
+- CSV columns: `channel, name, frequency_mhz, modulation, ctcss_dcs, delay,
+  locked_out, priority`
+- Empty frequency field for unused channels (rather than `0`)
+- UTF-8 encoded; compatible with Excel, Google Sheets, and any text editor
+
+#### Import (POST /api/channels/import)
+- Accepts a `.csv` file upload via multipart form data
+- Column matching by header name — order in the file does not matter
+- Full validation before any writes:
+  - Required columns check: `channel`, `name`, `frequency_mhz`, `modulation`
+  - Channel number range: 1–500
+  - Frequency range: 25–512 MHz (empty = clear channel)
+  - Modulation: invalid values silently coerced to `FM`
+  - Name truncated to 16 characters
+- Handles UTF-8 BOM (files exported from Excel)
+- Returns a summary: channels written, channels skipped, up to 20 error messages
+- Reloads the current bank in the channel manager after import completes
+
+#### UI — Channels tab toolbar
+- `↓ Export CSV` button — triggers export, disables during download, logs progress
+- `↑ Import CSV` label/button — opens native file picker, styled to match toolbar keys
+- Confirmation dialog before import warns user to have a backup
+- Activity log shows per-row errors if any rows were skipped
+- Both buttons disabled/relabelled with progress text during operation
+- Mobile: CSV buttons stack vertically at < 600px
+
+### Changed
+- `api/routes.py` — two new endpoints appended
+- `templates/index.html` — export/import buttons added to channel toolbar
+- `static/js/channels.js` — export fetch + blob download handler; import
+  FormData upload + confirmation dialog + error reporting appended
+- `static/css/style.css` — `.ch-csv-btns` and `.ch-import-label` styles added;
+  mobile stacking media query added
+
+### CSV format reference
+```csv
+channel,name,frequency_mhz,modulation,ctcss_dcs,delay,locked_out,priority
+1,RCPD Disp,483.4125,FM,0,2,false,false
+2,SamTrans,153.785,NFM,0,2,false,false
+3,,,,0,2,false,false
+```
+
+---
+
+## [0.6.4] — Mobile Responsive Layout
+
+### Added
+- Full responsive layout across three breakpoints — no backend changes, CSS only
+
+#### Breakpoints
+| Range | Layout |
+|---|---|
+| ≥ 1024px | Desktop — existing layout unchanged |
+| 600–1023px | Tablet — controls row stacks vertically, panels full width |
+| < 600px | Mobile — single column, compact everything |
+| < 380px | Very small — further font/padding reductions |
+
+#### Tablet (600–1023px)
+- Controls row (`controls-row`) switches from two-column to single-column grid
+- Keypad panel expands to full width
+- Levels panel retains its two-column internal layout (levels left + right)
+- Channel table scrolls horizontally inside a fixed container
+- Theme grid reduces to 3 columns
+- Scan groups grid reduces to 3 columns
+
+#### Mobile (< 600px)
+- Header sub-label ("web controller") hidden to save space
+- Tab nav buttons compact to 11px with tighter padding
+- Display frequency font reduced from 36px to 26px
+- Display icons wrap and compact
+- Keypad keys get larger vertical padding for easier tapping
+- Levels panel top section stacks to single column (left + right stacked)
+- Activity log height reduced to 90px
+- Recordings list hides size and date columns — shows filename and actions only
+- Channel toolbar stacks vertically; bank buttons wrap
+- Theme grid reduces to 2 columns; description text hidden
+- Scan groups grid reduces to 2 columns
+- Priority buttons wrap
+- Edit modal becomes a bottom sheet (slides up from bottom, full width,
+  rounded top corners only) — more natural on mobile
+- Backlight buttons switch to 2-column grid
+
+#### Very small (< 380px)
+- Frequency font further reduced to 22px
+- Tab buttons and keys further compacted
+
+#### Touch device improvements (`hover: none and pointer: coarse`)
+- All interactive elements enforce 44px minimum tap target height
+  (Apple HIG / Material Design guideline)
+- Sliders enlarged: track 6px tall, thumb 22×22px for easier dragging
+- Hover transforms removed (scale effects feel wrong on touch)
+
+### Changed
+- `static/css/style.css` — three `@media` blocks + one touch media query appended
+- `templates/base.html` — viewport meta updated to `maximum-scale=1.0`;
+  added `mobile-web-app-capable`, `apple-mobile-web-app-capable`,
+  `apple-mobile-web-app-status-bar-style`, and `theme-color` meta tags
+
+---
+
+## [0.6.3] — Theme Support: Five Radio-Inspired Themes
+
+### Added
+- `static/js/themes.js` — self-contained theme switcher module. Applies theme via
+  `data-theme` attribute on `<html>`, persists preference to `localStorage`,
+  defaults to Nightwatch on first load.
+- Five radio-inspired themes, each with a full set of CSS custom properties:
+  - **Nightwatch** — dark green on near-black (original, default)
+  - **Amber Alert** — orange-amber on dark walnut, inspired by vintage Motorola portables
+  - **Navy Ops** — steel blue on deep navy, inspired by military radio equipment
+  - **Phosphor** — bright green-white on pure black, classic CRT phosphor screen look
+  - **Daylight** — clean light grey with green accents for bright environments;
+    display screen intentionally kept dark green to preserve the radio panel feel
+- Five colour swatch buttons in the page header — radial gradient preview of each
+  theme; active theme shown with a white ring border; tooltip on hover shows name
+- `themes.js` loads first in script order to prevent flash of unstyled/wrong-theme
+  content before `DOMContentLoaded` fires
+
+### Changed
+- `static/css/style.css` — `:root` block split into five `[data-theme]` selectors;
+  `[data-theme="daylight"]` includes overrides for `.display-screen`, `.display-freq`,
+  `.display-name` to keep the green CRT display regardless of theme
+- `templates/base.html` — five `.theme-btn` swatch buttons added to header right
+  section; `themes.js` added as first script in load order
+- `static/js/main.js` — `Themes.init()` added to `DOMContentLoaded` handler
+- `static/css/style.css` — `.theme-switcher`, `.theme-btn`, `.theme-btn.active`,
+  swatch gradient styles added
+
+### Theme design decisions
+- All themes use the same green CRT display area — the frequency readout always
+  looks like radio hardware regardless of which UI theme is selected
+- Daylight theme uses light backgrounds for all panels but keeps the dark screen
+  to maintain visual identity and contrast for the frequency display
+- Swatch buttons use radial gradients showing the theme's accent colour fading
+  into its background colour — gives an accurate preview at small size
+
+---
+
+## [0.6.2] — Browser Notifications (Bug Fix: Script Load Order)
+
+### Added
+- `static/js/notifications.js` — self-contained browser notifications module using
+  the Web Notifications API. Fires a desktop notification on the rising edge of
+  `squelch_open` (closed → open), showing frequency, channel name, and modulation.
+  Auto-closes after 4 seconds. Preference persisted to `localStorage`.
+- `🔕 / 🔔` toggle button in the page header — requests browser permission on first
+  click, saves enabled state across sessions
+- Notification fires only on rising edge — not repeatedly while squelch stays open
+- Graceful degradation — button hidden if browser does not support notifications;
+  logs a message to activity log if permission is denied
+
+### Fixed
+
+#### Notification button did nothing when clicked
+
+**Root cause:** Script load order bug. `main.js` was loading first and calling
+`Notifs.init()` immediately at boot — but `notifications.js` hadn't loaded yet,
+so `window.Notifs` was `undefined` and the call did nothing silently.
+
+**Fix — three changes:**
+
+1. `templates/base.html` — `notifications.js` moved to load **before** `main.js`
+   so `window.Notifs` is defined by the time any other script references it.
+
+2. `static/js/main.js` — `Notifs.init()` moved from inline boot into the
+   `DOMContentLoaded` event handler (alongside `initSocket()`), guaranteeing all
+   scripts have parsed before initialisation runs.
+
+3. `static/js/notifications.js` — `applyStatus` patch moved into `init()` itself.
+   Patching `window.applyStatus` from `notifications.js` at parse time was also
+   unsafe; doing it inside `init()` (called from `DOMContentLoaded`) ensures
+   `applyStatus` exists in `window` before it is wrapped.
+
+### Changed
+- `templates/base.html` — `notifications.js` moved to position 1 in script load
+  order; `🔕` toggle button added to header right section
+- `static/js/main.js` — `Notifs.init()` moved into `DOMContentLoaded`; stale
+  `applyStatus` patch removed
+- `static/js/notifications.js` — `applyStatus` hook moved inside `init()`;
+  `Notifs.onState()` called from within the hook
+- `static/css/style.css` — `.notif-btn` and `.notif-btn--active` styles added
+
+---
+
+## [0.6.1] — Performance: Channel Loading Speed
+
+### Fixed
+
+#### Channel bank loading was extremely slow (~12–25 seconds per bank)
+
+Four targeted optimisations reduced load time to ~4–6 seconds for 50 channels:
+
+**`scanner/serial_manager.py`** — serial read timeout reduced from `1.0s` to `0.2s`.
+The BC125AT responds in ~50ms so 800ms of dead wait was burned on every read.
+
+**`scanner/commands.py`**
+- `_send_and_receive()` now accepts a `timeout` parameter (default still `2.0s`
+  for normal commands)
+- Read poll interval reduced from `50ms` to `10ms` — 5× faster response detection
+- `BULK_CIN_TIMEOUT = 0.5s` constant added — used only during bulk channel reads,
+  giving 5× headroom over real response time while being 4× faster than the default
+- `get_channels_bulk()` uses `BULK_CIN_TIMEOUT` for each `CIN` command
+
+**`scanner/scanner.py`** — `get_channels_bulk()` now stops the background poll
+thread before fetching channels and restarts it when done. Previously the poll
+thread was competing for `_cmd_lock` between every CIN command, adding
+unpredictable per-channel delays.
+
+**`static/js/channels.js`** — animated green progress bar shown while the bank
+loads, advancing to 90% during the request and completing to 100% on response.
+Replaces the blank/frozen table that gave no feedback during the wait.
+
+**`static/css/style.css`** — progress bar and percentage label styles added.
+
+### Performance comparison
+| Metric | Before | After |
+|---|---|---|
+| Serial read timeout | 1.0s | 0.2s |
+| Command timeout (bulk) | 2.0s | 0.5s |
+| Read poll interval | 50ms | 10ms |
+| Background poll during load | competing | paused |
+| 50 channels load time | ~12–25s | ~4–6s |
+
+---
+
 ## [0.6.0] — Phase 6: UI Polish, Settings Page & Channel Manager
 
 ### Added
@@ -74,47 +530,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   edit modal, settings panels, scan group toggle grid, priority buttons,
   server info grid, progress bar
 - `api/routes.py` — six new endpoints appended
-
----
-
-## [0.6.1] — Performance: Channel Loading Speed
-
-### Fixed
-
-#### Channel bank loading was extremely slow (~12–25 seconds per bank)
-
-Four targeted optimisations reduced load time to ~4–6 seconds for 50 channels:
-
-**`scanner/serial_manager.py`** — serial read timeout reduced from `1.0s` to `0.2s`.
-The BC125AT responds in ~50ms so 800ms of dead wait was burned on every read.
-
-**`scanner/commands.py`**
-- `_send_and_receive()` now accepts a `timeout` parameter (default still `2.0s`
-  for normal commands)
-- Read poll interval reduced from `50ms` to `10ms` — 5× faster response detection
-- `BULK_CIN_TIMEOUT = 0.5s` constant added — used only during bulk channel reads,
-  giving 5× headroom over real response time while being 4× faster than the default
-- `get_channels_bulk()` uses `BULK_CIN_TIMEOUT` for each `CIN` command
-
-**`scanner/scanner.py`** — `get_channels_bulk()` now stops the background poll
-thread before fetching channels and restarts it when done. Previously the poll
-thread was competing for `_cmd_lock` between every CIN command, adding
-unpredictable per-channel delays.
-
-**`static/js/channels.js`** — animated green progress bar shown while the bank
-loads, advancing to 90% during the request and completing to 100% on response.
-Replaces the blank/frozen table that gave no feedback during the wait.
-
-**`static/css/style.css`** — progress bar and percentage label styles added.
-
-### Performance comparison
-| Metric | Before | After |
-|---|---|---|
-| Serial read timeout | 1.0s | 0.2s |
-| Command timeout (bulk) | 2.0s | 0.5s |
-| Read poll interval | 50ms | 10ms |
-| Background poll during load | competing | paused |
-| 50 channels load time | ~12–25s | ~4–6s |
 
 ---
 

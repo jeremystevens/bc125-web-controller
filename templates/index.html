@@ -45,7 +45,7 @@
         <button class="key key--action" data-key="scan">Scan</button>
         <button class="key key--action" data-key="hold">Hold</button>
         <button class="key key--action" data-key="search">Search</button>
-        <button class="key key--action" data-key="weather">WX</button>
+        <button class="key key--action key--unsupported" data-key="weather" title="WX not supported via serial on BC125AT">WX</button>
         <button class="key" data-key="1">1</button>
         <button class="key" data-key="2">2</button>
         <button class="key" data-key="3">3</button>
@@ -53,7 +53,7 @@
         <button class="key" data-key="4">4</button>
         <button class="key" data-key="5">5</button>
         <button class="key" data-key="6">6</button>
-        <button class="key key--nav" data-key="down">▼</button>
+        <button class="key key--nav key--unsupported" data-key="down" title="Down not supported via serial on BC125AT">▼</button>
         <button class="key" data-key="7">7</button>
         <button class="key" data-key="8">8</button>
         <button class="key" data-key="9">9</button>
@@ -157,6 +157,24 @@
     <div class="ch-toolbar-right">
       <span class="ch-range-label" id="ch-range-label">CH 1–50</span>
       <button class="key key--action" id="ch-load-btn">Load Bank</button>
+      <div class="ch-csv-btns">
+        <div class="ch-format-group">
+          <span class="ch-format-label">CSV</span>
+          <button class="key key--nav" id="ch-export-btn" title="Export all 500 channels to CSV">↓ Export</button>
+          <label class="key key--nav ch-import-label" title="Import channels from CSV">
+            ↑ Import
+            <input type="file" id="ch-import-input" accept=".csv" style="display:none">
+          </label>
+        </div>
+        <div class="ch-format-group">
+          <span class="ch-format-label">.bc125at_ss</span>
+          <button class="key key--nav" id="ch-export-ss-btn" title="Export as native Uniden .bc125at_ss file">↓ Export</button>
+          <label class="key key--nav ch-import-label" title="Import native Uniden .bc125at_ss file">
+            ↑ Import
+            <input type="file" id="ch-import-ss-input" accept=".bc125at_ss" style="display:none">
+          </label>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -245,6 +263,38 @@
 {# ── Settings tab ── #}
 {% block settings %}
 <div class="settings-page">
+
+  <!-- Theme -->
+  <section class="panel settings-panel">
+    <p class="panel-label">appearance</p>
+    <div class="theme-grid" id="theme-switcher">
+      <button class="theme-card active" data-theme="nightwatch">
+        <span class="theme-swatch" data-theme="nightwatch"></span>
+        <span class="theme-card-name">Nightwatch</span>
+        <span class="theme-card-desc">Dark green · default</span>
+      </button>
+      <button class="theme-card" data-theme="amber">
+        <span class="theme-swatch" data-theme="amber"></span>
+        <span class="theme-card-name">Amber Alert</span>
+        <span class="theme-card-desc">Orange · vintage Motorola</span>
+      </button>
+      <button class="theme-card" data-theme="navy">
+        <span class="theme-swatch" data-theme="navy"></span>
+        <span class="theme-card-name">Navy Ops</span>
+        <span class="theme-card-desc">Steel blue · military radio</span>
+      </button>
+      <button class="theme-card" data-theme="phosphor">
+        <span class="theme-swatch" data-theme="phosphor"></span>
+        <span class="theme-card-name">Phosphor</span>
+        <span class="theme-card-desc">Bright green · classic CRT</span>
+      </button>
+      <button class="theme-card" data-theme="daylight">
+        <span class="theme-swatch" data-theme="daylight"></span>
+        <span class="theme-card-name">Daylight</span>
+        <span class="theme-card-desc">Light panels · bright environments</span>
+      </button>
+    </div>
+  </section>
 
   <!-- Serial -->
   <section class="panel settings-panel">
