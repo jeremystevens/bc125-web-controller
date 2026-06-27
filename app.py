@@ -16,11 +16,11 @@ from pathlib import Path
 
 from flask import Flask, render_template, send_from_directory
 
-from config import config
-from scanner import Scanner
-from recorder import Recorder
 from api import register_api
 from api.socket import socketio
+from config import config
+from recorder import Recorder
+from scanner import Scanner
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,15 +37,16 @@ app.config["SECRET_KEY"] = config.SECRET_KEY
 socketio.init_app(app)
 
 # ── Scanner ────────────────────────────────────────────────────────────────
-scanner     = Scanner()
+scanner = Scanner()
 app.scanner = scanner
 
 # ── Recorder ──────────────────────────────────────────────────────────────
-recorder     = Recorder()
+recorder = Recorder()
 app.recorder = recorder
 
 # ── Register API blueprints + SocketIO events ─────────────────────────────
 register_api(app)
+
 
 # ── Routes ────────────────────────────────────────────────────────────────
 @app.route("/")
@@ -95,7 +96,7 @@ if __name__ == "__main__":
             host=config.FLASK_HOST,
             port=config.FLASK_PORT,
             debug=config.FLASK_DEBUG,
-            use_reloader=False,    # required — prevents double scanner connect
+            use_reloader=False,  # required — prevents double scanner connect
             allow_unsafe_werkzeug=True,  # allow Werkzeug in threading mode
         )
     finally:

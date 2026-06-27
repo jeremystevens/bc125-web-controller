@@ -70,14 +70,16 @@ class SerialManager:
                     bytesize=serial.EIGHTBITS,
                     parity=serial.PARITY_NONE,
                     stopbits=serial.STOPBITS_ONE,
-                    timeout=0.2,        # 200ms — fast enough for BC125AT responses
+                    timeout=0.2,  # 200ms — fast enough for BC125AT responses
                     write_timeout=1.0,
                     xonxoff=False,
                     rtscts=False,
                     dsrdtr=False,
                 )
                 self._connected = True
-                logger.info("Connected to scanner on %s at %d baud.", self.port, self.baud)
+                logger.info(
+                    "Connected to scanner on %s at %d baud.", self.port, self.baud
+                )
                 return True
 
             except serial.SerialException as exc:

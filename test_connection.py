@@ -13,10 +13,10 @@ import argparse
 import logging
 import sys
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)-8s %(message)s")
-
-from scanner.serial_manager import SerialManager
 from scanner import commands as cmd
+from scanner.serial_manager import SerialManager
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)-8s %(message)s")
 
 SEPARATOR = "-" * 52
 
@@ -34,7 +34,7 @@ def run_tests(port: str) -> bool:
     if not mgr.connect():
         print("  FAIL — could not open port.")
         print("         Is the scanner on? Is the USB cable connected?")
-        print(f"         Override port: python test_connection.py --port COM4")
+        print("         Override port: python test_connection.py --port COM4")
         return False
     print("  OK")
 
@@ -58,7 +58,7 @@ def run_tests(port: str) -> bool:
     print("\n[4/6] Requesting status (STS)...")
     status = cmd.get_status(mgr)
     if status:
-        print(f"  OK")
+        print("  OK")
         print(f"       Display line 1 : {status['display_line1']!r}")
         print(f"       Display line 2 : {status['display_line2']!r}")
         print(f"       Signal strength: {status['signal_strength']}")
@@ -71,7 +71,7 @@ def run_tests(port: str) -> bool:
     print("\n[5/6] Requesting reception status (GLG)...")
     glg = cmd.get_reception_status(mgr)
     if glg:
-        print(f"  OK")
+        print("  OK")
         print(f"       Frequency : {glg['frequency_mhz']} MHz")
         print(f"       Modulation: {glg['modulation']}")
         print(f"       Channel   : {glg['channel_id']}  {glg['channel_name']!r}")
@@ -108,6 +108,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from config import config
+
     port = args.port or config.SCANNER_PORT
 
     success = run_tests(port)
