@@ -21,7 +21,6 @@ Usage:
 """
 
 import logging
-import os
 import queue
 import threading
 import time
@@ -36,9 +35,9 @@ logger = logging.getLogger(__name__)
 TAIL_SECONDS = 3.0
 
 # Audio settings
-SAMPLE_RATE  = 44100   # Hz
-CHANNELS     = 1       # mono — scanner audio is mono
-DTYPE        = "int16" # 16-bit PCM
+SAMPLE_RATE = 44100  # Hz
+CHANNELS = 1  # mono — scanner audio is mono
+DTYPE = "int16"  # 16-bit PCM
 
 
 class Recorder:
@@ -53,17 +52,17 @@ class Recorder:
         self._recordings_dir = Path(config.RECORDINGS_DIR)
         self._recordings_dir.mkdir(parents=True, exist_ok=True)
 
-        self._recording   = False
+        self._recording = False
         self._tail_active = False
-        self._lock        = threading.Lock()
+        self._lock = threading.Lock()
         self._audio_queue: queue.Queue = queue.Queue()
         self._record_thread: threading.Thread | None = None
         self._current_file: str | None = None
-        self._start_time:   float | None = None
+        self._start_time: float | None = None
 
         # Metadata for the current recording
-        self._current_channel: int   = 0
-        self._current_freq:    float = 0.0
+        self._current_channel: int = 0
+        self._current_freq: float = 0.0
 
     # ------------------------------------------------------------------
     # Public interface
@@ -105,16 +104,18 @@ class Recorder:
                 }
 
         # Build filename
-        now      = datetime.now().strftime("%Y%m%d_%H%M%S")
-        freq_tag = str(int(frequency_mhz * 1000)).zfill(7) if frequency_mhz else "000000"
-        ch_tag   = f"ch{channel_id}" if channel_id else "ch0"
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        freq_tag = (
+            str(int(frequency_mhz * 1000)).zfill(7) if frequency_mhz else "000000"
+        )
+        ch_tag = f"ch{channel_id}" if channel_id else "ch0"
         filename = f"{now}_{ch_tag}_{freq_tag}.wav"
         filepath = self._recordings_dir / filename
 
-        self._current_file    = filename
+        self._current_file = filename
         self._current_channel = channel_id
-        self._current_freq    = frequency_mhz
-        self._start_time      = time.monotonic()
+        self._current_freq = frequency_mhz
+        self._start_time = time.monotonic()
 
         # Clear queue from any previous run
         while not self._audio_queue.empty():
@@ -153,7 +154,7 @@ class Recorder:
                 }
 
         logger.info("Recording stop requested — tail: %.1fs", TAIL_SECONDS)
-        self._recording   = False
+        self._recording = False
         self._tail_active = True
         filename = self._current_file
         return {
@@ -165,11 +166,11 @@ class Recorder:
     def status(self) -> dict:
         """Return current recorder state."""
         return {
-            "recording":       self.is_recording,
-            "tail_active":     self._tail_active,
+            "recording": self.is_recording,
+            "tail_active": self._tail_active,
             "elapsed_seconds": self.elapsed_seconds,
-            "current_file":    self._current_file,
-            "tail_seconds":    TAIL_SECONDS,
+            "current_file": self._current_file,
+            "tail_seconds": TAIL_SECONDS,
         }
 
     def list_recordings(self) -> list[dict]:
@@ -180,12 +181,16 @@ class Recorder:
         files = []
         for path in sorted(self._recordings_dir.glob("*.wav"), reverse=True):
             stat = path.stat()
-            files.append({
-                "filename":  path.name,
-                "size_kb":   round(stat.st_size / 1024, 1),
-                "created":   datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-                "url":       f"/recordings/{path.name}",
-            })
+            files.append(
+                {
+                    "filename": path.name,
+                    "size_kb": round(stat.st_size / 1024, 1),
+                    "created": datetime.fromtimestamp(stat.st_mtime).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                    "url": f"/recordings/{path.name}",
+                }
+            )
         return files
 
     def delete_recording(self, filename: str) -> dict:
@@ -204,7 +209,10 @@ class Recorder:
 
         # Cannot delete the file currently being recorded
         if filename == self._current_file and self.is_recording:
-            return {"success": False, "message": "Cannot delete a recording in progress."}
+            return {
+                "success": False,
+                "message": "Cannot delete a recording in progress.",
+            }
 
         target.unlink()
         logger.info("Deleted recording: %s", filename)
@@ -227,7 +235,7 @@ class Recorder:
                 "sounddevice or soundfile not installed. "
                 "Run: pip install sounddevice soundfile"
             )
-            self._recording   = False
+            self._recording = False
             self._tail_active = False
             self._current_file = None
             return
@@ -296,7 +304,7 @@ class Recorder:
                 filepath.unlink()
 
         finally:
-            self._recording    = False
-            self._tail_active  = False
-            self._start_time   = None
+            self._recording = False
+            self._tail_active = False
+            self._start_time = None
             # Keep _current_file set so the UI can show the last saved name
