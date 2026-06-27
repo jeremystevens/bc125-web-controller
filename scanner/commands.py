@@ -117,18 +117,21 @@ def _hz_to_wire(freq_hz: int) -> int:
     return freq_hz // FREQUENCY_SCALE
 
 
-def _send_and_receive(mgr: SerialManager, cmd: str) -> str | None:
-    """Send *cmd*, return the first non-empty response line or None on timeout."""
+def _send_and_receive(mgr: SerialManager, cmd: str, timeout: float = RESPONSE_TIMEOUT) -> str | None:
+    """
+    Send *cmd*, return the first non-empty response line or None on timeout.
+    timeout: override the default RESPONSE_TIMEOUT for faster bulk reads.
+    """
     mgr.flush_input()
     if not mgr.send_raw(cmd):
         return None
 
-    deadline = time.monotonic() + RESPONSE_TIMEOUT
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         line = mgr.read_line()
         if line:
             return line
-        time.sleep(0.05)
+        time.sleep(0.01)   # 10ms poll — 5x faster than original 50ms
 
     logger.warning("No response to command: %s", cmd)
     return None
@@ -517,3 +520,100 @@ def start_scan(mgr: SerialManager) -> bool:
 
 def hold_scan(mgr: SerialManager) -> bool:
     return press_key(mgr, "hold")
+
+
+# ---------------------------------------------------------------------------
+# Channel write (requires program mode)
+# ---------------------------------------------------------------------------
+
+# Valid modulation modes
+MODULATION_MODES = ("AM", "FM", "NFM", "WFM", "FMB")
+
+# Valid delay values (seconds)
+DELAY_VALUES = ("-10", "-5", "0", "1", "2", "3", "4", "5")
+
+
+def set_channel(
+    mgr: SerialManager,
+    channel: int,
+    name: str,
+    freq_hz: int,
+    modulation: str = "FM",
+    ctcss_dcs: str = "0",
+    delay: str = "2",
+    locked_out: bool = False,
+    priority: bool = False,
+) -> bool:
+    """
+    CIN,<ch>,<name>,<freq_wire>,<mod>,<ctcss>,<dly>,<lockout>,<pri> — Write channel.
+    Requires program mode. Name max 16 chars, alphanumeric + spaces.
+    freq_hz: frequency in Hz (25 MHz – 512 MHz), 0 to clear the channel.
+    """
+    name      = name[:16].strip()
+    wire_freq = _hz_to_wire(freq_hz) if freq_hz else 0
+    mod       = modulation.upper() if modulation.upper() in MODULATION_MODES else "FM"
+    lout      = "1" if locked_out else "0"
+    pri       = "1" if priority else "0"
+
+    if not _enter_program_mode(mgr):
+        return False
+    resp = _send_and_receive(
+        mgr, f"CIN,{channel},{name},{wire_freq},{mod},{ctcss_dcs},{delay},{lout},{pri}"
+    )
+    _exit_program_mode(mgr)
+    return _ok(resp)
+
+
+# Timeout for individual CIN commands during bulk reads.
+# Real BC125AT response time is ~50-100ms; 0.5s gives 5x headroom
+# while being 4x faster than the default 2s RESPONSE_TIMEOUT.
+BULK_CIN_TIMEOUT = 0.5
+
+
+def get_channels_bulk(mgr: SerialManager, start: int, end: int) -> list[dict]:
+    """
+    Fetch a range of channels in a single program mode session.
+
+    Speed optimisations vs individual get_channel() calls:
+      1. Single PRG/EPG session (saves ~100ms per channel)
+      2. Short 0.5s per-command timeout (CIN responses arrive in ~50-100ms)
+      3. 10ms read poll interval (vs 50ms default)
+
+    start/end: inclusive channel numbers (1-500).
+    """
+    results = []
+    if not _enter_program_mode(mgr):
+        return results
+
+    for ch in range(start, end + 1):
+        resp  = _send_and_receive(mgr, f"CIN,{ch}", timeout=BULK_CIN_TIMEOUT)
+        parts = _parse(resp)
+        if parts and len(parts) >= 8:
+            wire_freq = _safe_int(parts[2], 0)
+            freq_hz   = _wire_to_hz(wire_freq)
+            results.append({
+                "channel":       _safe_int(parts[0], ch),
+                "name":          parts[1].strip(),
+                "frequency_hz":  freq_hz,
+                "frequency_mhz": round(freq_hz / 1_000_000, 4) if freq_hz else 0.0,
+                "modulation":    parts[3].strip(),
+                "ctcss_dcs":     parts[4].strip(),
+                "delay":         parts[5].strip(),
+                "locked_out":    parts[6].strip() == "1",
+                "priority":      parts[7].strip() == "1",
+            })
+        else:
+            results.append({
+                "channel":       ch,
+                "name":          "",
+                "frequency_hz":  0,
+                "frequency_mhz": 0.0,
+                "modulation":    "FM",
+                "ctcss_dcs":     "0",
+                "delay":         "2",
+                "locked_out":    False,
+                "priority":      False,
+            })
+
+    _exit_program_mode(mgr)
+    return results

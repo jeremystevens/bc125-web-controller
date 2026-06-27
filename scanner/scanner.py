@@ -159,6 +159,26 @@ class Scanner:
         with self._cmd_lock:
             return cmd.get_channel(self._mgr, channel)
 
+    def set_channel(self, channel: int, **kwargs) -> bool:
+        with self._cmd_lock:
+            return cmd.set_channel(self._mgr, channel, **kwargs)
+
+    def get_channels_bulk(self, start: int, end: int) -> list[dict]:
+        """
+        Fetch a range of channels in one program mode session.
+        Pauses the background poll thread for the duration so it does
+        not compete for _cmd_lock and cause per-channel delays.
+        """
+        was_polling = self._polling
+        if was_polling:
+            self._stop_polling()
+        try:
+            with self._cmd_lock:
+                return cmd.get_channels_bulk(self._mgr, start, end)
+        finally:
+            if was_polling:
+                self._start_polling()
+
     def get_scan_groups(self) -> dict | None:
         with self._cmd_lock:
             return cmd.get_scan_groups(self._mgr)

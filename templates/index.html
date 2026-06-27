@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-
 {% block title %}BC125AT Controller{% endblock %}
 
-{% block content %}
+{# ── Dashboard tab ── #}
+{% block dashboard %}
 <div class="dashboard">
 
-  <!-- ── Status display ── -->
+  <!-- Status display -->
   <section class="panel panel--display">
     <div class="display-screen">
       <div class="display-freq" id="display-freq">--- --- MHz</div>
@@ -25,20 +25,17 @@
           <span class="signal-bar" id="sig-5"></span>
         </span>
         <span class="icon-pill battery-pill">
-          <span class="battery-icon">
-            <span class="battery-fill" id="battery-fill"></span>
-          </span>
+          <span class="battery-icon"><span class="battery-fill" id="battery-fill"></span></span>
           <span id="battery-volts">--V</span>
         </span>
         <span class="icon-pill rec-pill" id="rec-indicator">
-          <span class="rec-dot"></span>
-          REC <span id="rec-timer">0:00</span>
+          <span class="rec-dot"></span>REC <span id="rec-timer">0:00</span>
         </span>
       </div>
     </div>
   </section>
 
-  <!-- ── Controls row ── -->
+  <!-- Controls row -->
   <div class="controls-row">
 
     <!-- Keypad -->
@@ -49,22 +46,18 @@
         <button class="key key--action" data-key="hold">Hold</button>
         <button class="key key--action" data-key="search">Search</button>
         <button class="key key--action" data-key="weather">WX</button>
-
         <button class="key" data-key="1">1</button>
         <button class="key" data-key="2">2</button>
         <button class="key" data-key="3">3</button>
         <button class="key key--nav" data-key="up">▲</button>
-
         <button class="key" data-key="4">4</button>
         <button class="key" data-key="5">5</button>
         <button class="key" data-key="6">6</button>
         <button class="key key--nav" data-key="down">▼</button>
-
         <button class="key" data-key="7">7</button>
         <button class="key" data-key="8">8</button>
         <button class="key" data-key="9">9</button>
         <button class="key key--nav" data-key="lockout">L/O</button>
-
         <button class="key" data-key="dot">.</button>
         <button class="key" data-key="0">0</button>
         <button class="key key--enter" data-key="enter">E</button>
@@ -76,15 +69,11 @@
       </div>
     </section>
 
-    <!-- Right column: levels + recording + log -->
+    <!-- Levels + Recording -->
     <section class="panel panel--levels">
-
       <div class="levels-top">
-
-        <!-- Left side: sliders + backlight -->
         <div class="levels-left">
           <p class="panel-label">levels</p>
-
           <div class="level-group">
             <div class="level-header">
               <span class="level-name">Volume</span>
@@ -93,7 +82,6 @@
             <input type="range" class="level-slider" id="vol-slider" min="0" max="15" value="8" step="1">
             <div class="level-ticks"><span>0</span><span>5</span><span>10</span><span>15</span></div>
           </div>
-
           <div class="level-group">
             <div class="level-header">
               <span class="level-name">Squelch</span>
@@ -102,7 +90,6 @@
             <input type="range" class="level-slider" id="sql-slider" min="0" max="15" value="3" step="1">
             <div class="level-ticks"><span>0</span><span>5</span><span>10</span><span>15</span></div>
           </div>
-
           <div class="level-group">
             <div class="level-header">
               <span class="level-name">Backlight</span>
@@ -116,25 +103,19 @@
             </div>
           </div>
         </div>
-
-        <!-- Right side: recording + log -->
         <div class="levels-right">
           <p class="panel-label">recording</p>
-
           <div class="rec-compact">
             <div class="rec-compact-status">
               <span class="level-name">Status</span>
               <span class="level-value rec-status-text" id="rec-status-text">idle</span>
             </div>
             <div class="rec-compact-controls">
-              <button class="rec-btn rec-btn--start" id="rec-start">
-                <span class="rec-dot"></span>Record
-              </button>
+              <button class="rec-btn rec-btn--start" id="rec-start"><span class="rec-dot"></span>Record</button>
               <button class="rec-btn rec-btn--stop" id="rec-stop" disabled>■ Stop</button>
             </div>
             <div class="rec-file" id="rec-file">&nbsp;</div>
           </div>
-
           <div class="level-group log-group" style="margin-top:12px">
             <div class="level-header">
               <span class="level-name">Activity</span>
@@ -145,10 +126,7 @@
             </div>
           </div>
         </div>
-
       </div>
-
-      <!-- Recordings list — full width inside the panel -->
       <div class="recordings-section">
         <div class="recordings-header">
           <span class="level-name">Recordings</span>
@@ -158,9 +136,196 @@
           <span class="log-empty">No recordings yet</span>
         </div>
       </div>
-
     </section>
 
   </div>
+</div>
+{% endblock %}
+
+{# ── Channels tab ── #}
+{% block channels %}
+<div class="ch-manager">
+  <div class="ch-toolbar">
+    <div class="ch-bank-nav">
+      <span class="panel-label" style="margin:0">Bank</span>
+      <div class="ch-bank-btns" id="bank-btns">
+        {% for b in range(1, 11) %}
+        <button class="bank-btn {% if b == 1 %}active{% endif %}" data-bank="{{ b }}">{{ b }}</button>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="ch-toolbar-right">
+      <span class="ch-range-label" id="ch-range-label">CH 1–50</span>
+      <button class="key key--action" id="ch-load-btn">Load Bank</button>
+    </div>
+  </div>
+
+  <div class="ch-table-wrap">
+    <table class="ch-table">
+      <thead>
+        <tr>
+          <th>CH</th>
+          <th>Name</th>
+          <th>Frequency</th>
+          <th>Mode</th>
+          <th>CTCSS/DCS</th>
+          <th>Delay</th>
+          <th>L/O</th>
+          <th>PRI</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="ch-tbody">
+        <tr><td colspan="9" class="ch-empty">Select a bank and click Load Bank</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Edit modal -->
+  <div class="modal-overlay" id="ch-modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Edit Channel</span>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-row">
+          <label class="modal-label">Name <span class="modal-hint">(max 16 chars)</span></label>
+          <input type="text" id="edit-name" class="modal-input" maxlength="16" placeholder="Channel name">
+        </div>
+        <div class="modal-row">
+          <label class="modal-label">Frequency (MHz)</label>
+          <input type="number" id="edit-freq" class="modal-input" step="0.0025" placeholder="e.g. 162.550">
+        </div>
+        <div class="modal-row">
+          <label class="modal-label">Modulation</label>
+          <select id="edit-mod" class="modal-input modal-select">
+            <option value="FM">FM</option>
+            <option value="NFM">NFM</option>
+            <option value="AM">AM</option>
+            <option value="WFM">WFM</option>
+            <option value="FMB">FMB</option>
+          </select>
+        </div>
+        <div class="modal-row">
+          <label class="modal-label">CTCSS/DCS Tone</label>
+          <input type="text" id="edit-ctcss" class="modal-input" placeholder="0 = none">
+        </div>
+        <div class="modal-row">
+          <label class="modal-label">Delay (seconds)</label>
+          <select id="edit-delay" class="modal-input modal-select">
+            <option value="-10">-10</option>
+            <option value="-5">-5</option>
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </div>
+        <div class="modal-row modal-row--checks">
+          <label class="modal-check">
+            <input type="checkbox" id="edit-lockout"> Locked out
+          </label>
+          <label class="modal-check">
+            <input type="checkbox" id="edit-priority"> Priority
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="key" id="modal-cancel">Cancel</button>
+        <button class="key key--action" id="modal-save">Save Channel</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{# ── Settings tab ── #}
+{% block settings %}
+<div class="settings-page">
+
+  <!-- Serial -->
+  <section class="panel settings-panel">
+    <p class="panel-label">serial connection</p>
+    <div class="settings-grid">
+      <div class="setting-row">
+        <label class="setting-label">Scanner Port</label>
+        <input type="text" id="set-port" class="modal-input" placeholder="COM3">
+        <span class="setting-hint">Windows: COM3 · Linux: /dev/ttyACM0</span>
+      </div>
+      <div class="setting-row">
+        <label class="setting-label">Poll Interval (seconds)</label>
+        <input type="number" id="set-poll" class="modal-input" min="0.2" max="5" step="0.1" placeholder="0.5">
+        <span class="setting-hint">How often the scanner is polled for status (0.2–5.0s)</span>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <span class="setting-hint" id="serial-save-note"></span>
+      <button class="key key--action" id="serial-save">Save Serial Settings</button>
+    </div>
+  </section>
+
+  <!-- Scan groups -->
+  <section class="panel settings-panel">
+    <p class="panel-label">scan groups</p>
+    <div class="groups-grid" id="groups-grid">
+      {% for i in range(1, 11) %}
+      <label class="group-toggle">
+        <input type="checkbox" class="group-check" data-group="{{ i }}" checked>
+        <span class="group-label">Bank {{ i }}<br><span class="group-sub">Ch {{ (i-1)*50+1 }}–{{ i*50 }}</span></span>
+      </label>
+      {% endfor %}
+    </div>
+    <div class="settings-footer">
+      <button class="key key--action" id="groups-save">Apply Scan Groups</button>
+    </div>
+  </section>
+
+  <!-- Priority mode -->
+  <section class="panel settings-panel">
+    <p class="panel-label">priority mode</p>
+    <div class="priority-btns" id="priority-btns">
+      <button class="pri-btn active" data-mode="0">Off</button>
+      <button class="pri-btn" data-mode="1">On</button>
+      <button class="pri-btn" data-mode="2">Plus</button>
+      <button class="pri-btn" data-mode="3">DND</button>
+    </div>
+    <p class="setting-hint" style="margin-top:8px">
+      Off — disabled · On — checks priority channel every 2s ·
+      Plus — every scan step · DND — only when channel is clear
+    </p>
+  </section>
+
+  <!-- Recording -->
+  <section class="panel settings-panel">
+    <p class="panel-label">recording</p>
+    <div class="settings-grid">
+      <div class="setting-row">
+        <label class="setting-label">Output Directory</label>
+        <input type="text" id="set-rec-dir" class="modal-input" placeholder="recordings" disabled>
+        <span class="setting-hint">Recordings are saved to the <code>recordings/</code> folder. Edit <code>.env</code> to change.</span>
+      </div>
+      <div class="setting-row">
+        <label class="setting-label">Tail Duration</label>
+        <input type="text" id="set-tail" class="modal-input" value="3 seconds" disabled>
+        <span class="setting-hint">Seconds of audio captured after Stop is pressed. Edit <code>recorder/recorder.py</code> to change.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Status -->
+  <section class="panel settings-panel">
+    <p class="panel-label">server info</p>
+    <div class="info-grid" id="settings-info">
+      <div class="info-row"><span class="info-key">Model</span><span class="info-val" id="inf-model">--</span></div>
+      <div class="info-row"><span class="info-key">Firmware</span><span class="info-val" id="inf-firmware">--</span></div>
+      <div class="info-row"><span class="info-key">Port</span><span class="info-val" id="inf-port">--</span></div>
+      <div class="info-row"><span class="info-key">Poll interval</span><span class="info-val" id="inf-poll">--</span></div>
+      <div class="info-row"><span class="info-key">Battery</span><span class="info-val" id="inf-battery">--</span></div>
+    </div>
+  </section>
+
 </div>
 {% endblock %}

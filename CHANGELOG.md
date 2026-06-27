@@ -7,6 +7,117 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.6.0] — Phase 6: UI Polish, Settings Page & Channel Manager
+
+### Added
+
+#### Tab navigation
+- Three-tab single-page layout: **Dashboard**, **Channels**, **Settings**
+- `templates/base.html` — tab nav bar in header with active state highlighting
+- `static/js/tabs.js` — tab switching with lazy loading (Channels and Settings
+  load data only when their tab is first opened, not on page load)
+- Dashboard tab is the default active tab on page load
+
+#### Channel Manager (Channels tab)
+- Bank pagination — 10 banks of 50 channels each, navigated via bank buttons 1–10
+- Full channel table: channel number, name, frequency (MHz), modulation,
+  CTCSS/DCS tone, delay, locked out status, priority status, and action buttons
+- **Jump** button — sends scanner directly to that channel from the table
+- **Edit** button — opens modal with full channel editing:
+  - Channel name (max 16 chars)
+  - Frequency in MHz (step 0.0025)
+  - Modulation selector: FM, NFM, AM, WFM, FMB
+  - CTCSS/DCS tone
+  - Delay selector: -10, -5, 0, 1, 2, 3, 4, 5 seconds
+  - Locked out checkbox
+  - Priority checkbox
+- Save writes channel back to scanner via `PUT /api/channel/<ch>`
+- Animated progress bar while bank is loading
+- `static/js/channels.js` — all channel manager UI logic
+
+#### Settings page (Settings tab)
+- **Serial section** — port and poll interval editable, saved to `.env` file;
+  note shown advising server restart for changes to take effect
+- **Scan groups section** — 10 toggle cards (Bank 1–10 with channel range shown);
+  Apply button sends to scanner live via `POST /api/settings/groups`
+- **Priority mode section** — Off / On / Plus / DND buttons; applies live via
+  `POST /api/settings/priority`
+- **Recording section** — read-only display of output directory and tail duration
+  with instructions for editing each
+- **Server info section** — live display of model, firmware, port, poll interval,
+  battery voltage pulled from `/api/status` and `/api/settings`
+- `static/js/settings.js` — all settings page UI logic
+
+#### New API endpoints
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/channels?bank=<1-10>` | Fetch 50 channels for a bank |
+| PUT | `/api/channel/<ch>` | Write channel data to scanner |
+| GET | `/api/settings` | Return all current runtime settings |
+| POST | `/api/settings/serial` | Save port/poll to `.env` file |
+| POST | `/api/settings/groups` | Apply scan group states live |
+| POST | `/api/settings/priority` | Apply priority mode live |
+
+#### New scanner commands
+- `set_channel()` in `scanner/commands.py` — writes a full channel record via `CIN`
+  with name, frequency, modulation, CTCSS/DCS, delay, lockout, priority
+- `get_channels_bulk()` in `scanner/commands.py` — fetches a range of channels in
+  a single program mode session (one PRG/EPG pair for the whole bank)
+- Both exposed on `Scanner` class in `scanner/scanner.py`
+
+### Changed
+- `templates/base.html` — added tab nav, three `tab-pane` divs, loads `tabs.js`,
+  `channels.js`, `settings.js` after existing scripts
+- `templates/index.html` — restructured into three Jinja2 blocks:
+  `dashboard`, `channels`, `settings`
+- `static/css/style.css` — added tab nav styles, channel table, bank buttons,
+  edit modal, settings panels, scan group toggle grid, priority buttons,
+  server info grid, progress bar
+- `api/routes.py` — six new endpoints appended
+
+---
+
+## [0.6.1] — Performance: Channel Loading Speed
+
+### Fixed
+
+#### Channel bank loading was extremely slow (~12–25 seconds per bank)
+
+Four targeted optimisations reduced load time to ~4–6 seconds for 50 channels:
+
+**`scanner/serial_manager.py`** — serial read timeout reduced from `1.0s` to `0.2s`.
+The BC125AT responds in ~50ms so 800ms of dead wait was burned on every read.
+
+**`scanner/commands.py`**
+- `_send_and_receive()` now accepts a `timeout` parameter (default still `2.0s`
+  for normal commands)
+- Read poll interval reduced from `50ms` to `10ms` — 5× faster response detection
+- `BULK_CIN_TIMEOUT = 0.5s` constant added — used only during bulk channel reads,
+  giving 5× headroom over real response time while being 4× faster than the default
+- `get_channels_bulk()` uses `BULK_CIN_TIMEOUT` for each `CIN` command
+
+**`scanner/scanner.py`** — `get_channels_bulk()` now stops the background poll
+thread before fetching channels and restarts it when done. Previously the poll
+thread was competing for `_cmd_lock` between every CIN command, adding
+unpredictable per-channel delays.
+
+**`static/js/channels.js`** — animated green progress bar shown while the bank
+loads, advancing to 90% during the request and completing to 100% on response.
+Replaces the blank/frozen table that gave no feedback during the wait.
+
+**`static/css/style.css`** — progress bar and percentage label styles added.
+
+### Performance comparison
+| Metric | Before | After |
+|---|---|---|
+| Serial read timeout | 1.0s | 0.2s |
+| Command timeout (bulk) | 2.0s | 0.5s |
+| Read poll interval | 50ms | 10ms |
+| Background poll during load | competing | paused |
+| 50 channels load time | ~12–25s | ~4–6s |
+
+---
+
 ## [0.5.3] — Bug Fixes: WebSocket Stability & Frequency Display
 
 ### Fixed

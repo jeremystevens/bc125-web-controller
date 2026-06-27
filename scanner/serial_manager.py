@@ -70,7 +70,7 @@ class SerialManager:
                     bytesize=serial.EIGHTBITS,
                     parity=serial.PARITY_NONE,
                     stopbits=serial.STOPBITS_ONE,
-                    timeout=1.0,
+                    timeout=0.2,        # 200ms — fast enough for BC125AT responses
                     write_timeout=1.0,
                     xonxoff=False,
                     rtscts=False,

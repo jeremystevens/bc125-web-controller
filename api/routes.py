@@ -413,3 +413,181 @@ def delete_recording(filename: str):
     if not result["success"]:
         return error(result["message"], status=404)
     return success(message=result["message"])
+
+
+# ---------------------------------------------------------------------------
+# Channel Manager  (Phase 6)
+# ---------------------------------------------------------------------------
+
+@scanner_bp.get("/channels")
+@scanner_required
+def get_channels():
+    """
+    GET /api/channels?bank=<1-10>
+    Fetch all 50 channels in a bank (1 bank = channels 1-50, 2 = 51-100 etc.)
+    Defaults to bank 1.
+    """
+    try:
+        bank = int(request.args.get("bank", 1))
+    except (ValueError, TypeError):
+        bank = 1
+    bank  = max(1, min(10, bank))
+    start = (bank - 1) * 50 + 1
+    end   = bank * 50
+    channels = get_scanner().get_channels_bulk(start, end)
+    return success({
+        "bank":     bank,
+        "start":    start,
+        "end":      end,
+        "channels": channels,
+    })
+
+
+@scanner_bp.put("/channel/<int:ch>")
+@scanner_required
+def update_channel(ch: int):
+    """
+    PUT /api/channel/<ch> — Write channel data.
+    Body: { name, frequency_hz, modulation, ctcss_dcs, delay, locked_out, priority }
+    """
+    if not 1 <= ch <= 500:
+        return error("Channel out of range.", details="BC125AT supports channels 1–500.")
+
+    body = request.get_json(silent=True)
+    if not body:
+        return error("Request body must be JSON.")
+
+    ok = get_scanner().set_channel(
+        channel    = ch,
+        name       = body.get("name", ""),
+        freq_hz    = int(body.get("frequency_hz", 0)),
+        modulation = body.get("modulation", "FM"),
+        ctcss_dcs  = str(body.get("ctcss_dcs", "0")),
+        delay      = str(body.get("delay", "2")),
+        locked_out = bool(body.get("locked_out", False)),
+        priority   = bool(body.get("priority", False)),
+    )
+    if not ok:
+        return error(f"Failed to write channel {ch}.")
+    return success(message=f"Channel {ch} updated.")
+
+
+# ---------------------------------------------------------------------------
+# Settings  (Phase 6)
+# ---------------------------------------------------------------------------
+
+@scanner_bp.get("/settings")
+def get_settings():
+    """
+    GET /api/settings — Return current runtime settings and scanner config.
+    Does not require scanner connection for most fields.
+    """
+    from config import config as cfg
+    scanner  = get_scanner()
+
+    settings = {
+        "serial": {
+            "port":          cfg.SCANNER_PORT,
+            "baud":          cfg.SCANNER_BAUD,
+            "poll_interval": cfg.SCANNER_POLL_INTERVAL,
+        },
+        "recording": {
+            "directory":     cfg.RECORDINGS_DIR,
+            "tail_seconds":  current_app.recorder.status()["tail_seconds"],
+        },
+        "flask": {
+            "host": cfg.FLASK_HOST,
+            "port": cfg.FLASK_PORT,
+        },
+    }
+
+    # Live scanner settings (only if connected)
+    if scanner.is_connected:
+        groups   = scanner.get_scan_groups()
+        priority = scanner.get_priority_mode()
+        settings["scan_groups"]    = groups.get("groups") if groups else None
+        settings["priority_mode"]  = priority.get("priority_mode") if priority else None
+
+    return success(settings)
+
+
+@scanner_bp.post("/settings/groups")
+@scanner_required
+def settings_set_groups():
+    """POST /api/settings/groups — Set all 10 scan group states."""
+    body = request.get_json(silent=True)
+    if not body or "groups" not in body:
+        return error("Body must be JSON with 'groups' key.")
+    groups = body["groups"]
+    if not isinstance(groups, list) or len(groups) != 10:
+        return error("'groups' must be a list of exactly 10 booleans.")
+    ok = get_scanner().set_scan_groups([bool(g) for g in groups])
+    if not ok:
+        return error("Failed to update scan groups.")
+    return success(message="Scan groups updated.")
+
+
+@scanner_bp.post("/settings/priority")
+@scanner_required
+def settings_set_priority():
+    """POST /api/settings/priority — Set priority mode. Body: { mode: '0'|'1'|'2'|'3' }"""
+    body = request.get_json(silent=True)
+    if not body or "mode" not in body:
+        return error("Body must be JSON with 'mode' key.")
+    ok = get_scanner().set_priority_mode(str(body["mode"]))
+    if not ok:
+        return error("Failed to set priority mode.",
+                     details="Valid modes: 0=Off, 1=On, 2=Plus, 3=DND.")
+    return success(message=f"Priority mode set to {body['mode']}.")
+
+
+@scanner_bp.post("/settings/serial")
+def settings_set_serial():
+    """
+    POST /api/settings/serial — Update serial settings in .env file.
+    Body: { port, poll_interval }
+    Requires server restart to take full effect.
+    """
+    body = request.get_json(silent=True)
+    if not body:
+        return error("Body must be JSON.")
+
+    import os
+    from pathlib import Path
+
+    env_path = Path(".env")
+    if not env_path.exists():
+        # Create from example if not present
+        example = Path(".env.example")
+        if example.exists():
+            env_path.write_text(example.read_text())
+        else:
+            env_path.write_text("")
+
+    lines   = env_path.read_text().splitlines()
+    updates = {}
+    if "port" in body:
+        updates["SCANNER_PORT"] = body["port"]
+    if "poll_interval" in body:
+        try:
+            val = float(body["poll_interval"])
+            updates["SCANNER_POLL_INTERVAL"] = str(round(max(0.2, min(5.0, val)), 1))
+        except (ValueError, TypeError):
+            return error("poll_interval must be a number between 0.2 and 5.0.")
+
+    # Update or append each key
+    for key, val in updates.items():
+        found = False
+        for i, line in enumerate(lines):
+            if line.startswith(f"{key}=") or line.startswith(f"{key} ="):
+                lines[i] = f"{key}={val}"
+                found = True
+                break
+        if not found:
+            lines.append(f"{key}={val}")
+
+    env_path.write_text("\n".join(lines) + "\n")
+    return success(
+        {"updated": updates},
+        message="Settings saved to .env. Restart the server for serial changes to take effect.",
+    )

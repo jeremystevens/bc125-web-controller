@@ -17,6 +17,11 @@
         </span>
         <span class="header-sub">web controller</span>
       </div>
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+        <button class="tab-btn" data-tab="channels">Channels</button>
+        <button class="tab-btn" data-tab="settings">Settings</button>
+      </nav>
       <div class="header-right">
         <span class="header-status" id="connection-status">connecting...</span>
       </div>
@@ -24,13 +29,28 @@
   </header>
 
   <main class="site-main">
-    {% block content %}{% endblock %}
+    <!-- Dashboard tab -->
+    <div class="tab-pane active" id="tab-dashboard">
+      {% block dashboard %}{% endblock %}
+    </div>
+
+    <!-- Channels tab -->
+    <div class="tab-pane" id="tab-channels">
+      {% block channels %}{% endblock %}
+    </div>
+
+    <!-- Settings tab -->
+    <div class="tab-pane" id="tab-settings">
+      {% block settings %}{% endblock %}
+    </div>
   </main>
 
-  <!-- SocketIO client library (served by Flask-SocketIO) -->
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
   <script src="{{ url_for('static', filename='js/socket.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/tabs.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/channels.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
