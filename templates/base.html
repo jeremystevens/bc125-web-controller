@@ -25,9 +25,18 @@
         <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
         <button class="tab-btn" data-tab="channels">Channels</button>
         <button class="tab-btn" data-tab="settings">Settings</button>
+        <button class="tab-btn" data-tab="history">
+          History <span class="hist-tab-badge" id="history-badge"></span>
+        </button>
+        <button class="tab-btn" data-tab="status">Status</button>
       </nav>
       <div class="header-right">
         <button class="notif-btn" id="notif-toggle" title="Enable notifications">🔕</button>
+        {% if admin %}
+          <button class="auth-btn auth-btn--out" id="auth-logout-btn" title="Sign out">🔓 Admin</button>
+        {% else %}
+          <a class="auth-btn auth-btn--in" href="/auth/login?next=/" title="Sign in for full access">🔒 Sign in</a>
+        {% endif %}
         <span class="header-status" id="connection-status">connecting...</span>
       </div>
     </div>
@@ -48,12 +57,28 @@
     <div class="tab-pane" id="tab-settings">
       {% block settings %}{% endblock %}
     </div>
+
+    <!-- History tab -->
+    <div class="tab-pane" id="tab-history">
+      {% block history %}{% endblock %}
+    </div>
+
+    <!-- Status tab -->
+    <div class="tab-pane" id="tab-status">
+      {% block status %}{% endblock %}
+    </div>
   </main>
 
   <!-- Load order matters: themes first (prevents flash), then notifications, then main -->
+  <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
   <script src="{{ url_for('static', filename='js/themes.js') }}"></script>
   <script src="{{ url_for('static', filename='js/shortcuts.js') }}"></script>
   <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/smartresume.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/history.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/discovery.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/favorites.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/status.js') }}"></script>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
   <script src="{{ url_for('static', filename='js/socket.js') }}"></script>
@@ -61,5 +86,12 @@
   <script src="{{ url_for('static', filename='js/channels.js') }}"></script>
   <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
   {% block scripts %}{% endblock %}
+  <script>
+    // Logout button
+    document.getElementById('auth-logout-btn')?.addEventListener('click', async () => {
+      await fetch('/auth/logout', { method: 'POST' });
+      window.location.reload();
+    });
+  </script>
 </body>
 </html>

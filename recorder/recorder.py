@@ -86,13 +86,20 @@ class Recorder:
             return 0.0
         return round(time.monotonic() - self._start_time, 1)
 
-    def start(self, channel_id: int = 0, frequency_mhz: float = 0.0) -> dict:
+    def start(
+        self,
+        channel_id:    int   = 0,
+        frequency_mhz: float = 0.0,
+        name:          str   = "",
+    ) -> dict:
         """
         Start recording from the default audio input.
 
         Args:
             channel_id:    Current scanner channel (used in filename).
             frequency_mhz: Current frequency in MHz (used in filename).
+            name:          Optional base filename override (without extension).
+                           If provided, used as the WAV filename directly.
 
         Returns dict with success status and filename.
         """
@@ -104,11 +111,14 @@ class Recorder:
                     "file": self._current_file,
                 }
 
-        # Build filename
-        now      = datetime.now().strftime("%Y%m%d_%H%M%S")
-        freq_tag = str(int(frequency_mhz * 1000)).zfill(7) if frequency_mhz else "000000"
-        ch_tag   = f"ch{channel_id}" if channel_id else "ch0"
-        filename = f"{now}_{ch_tag}_{freq_tag}.wav"
+        # Build filename — use provided name or generate default
+        if name:
+            filename = name if name.endswith(".wav") else name + ".wav"
+        else:
+            now      = datetime.now().strftime("%Y%m%d_%H%M%S")
+            freq_tag = str(int(frequency_mhz * 1000)).zfill(7) if frequency_mhz else "000000"
+            ch_tag   = f"ch{channel_id}" if channel_id else "ch0"
+            filename = f"{now}_{ch_tag}_{freq_tag}.wav"
         filepath = self._recordings_dir / filename
 
         self._current_file    = filename

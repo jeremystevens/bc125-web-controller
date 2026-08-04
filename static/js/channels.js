@@ -1,3 +1,279 @@
+/* ════════════════════════════════════════════════════════
+   Channel Search — background loader + live filter
+   ════════════════════════════════════════════════════════
+
+   Strategy:
+     1. When the Channels tab first opens, load bank 1 immediately
+        (normal flow) then silently fetch banks 2–10 in background.
+     2. All 500 channels are cached in `allChannels[]`.
+     3. Search input filters allChannels[] in real time (debounced 200ms).
+     4. Status indicator shows background load progress, then result count.
+     5. If user searches before all banks finish, results include
+        whatever has loaded so far — message indicates partial results.
+*/
+
+const Search = (() => {
+
+  let allChannels   = [];          // cache — grows as banks load
+  let loadedBanks   = new Set();   // which banks are in allChannels
+  let isLoadingAll  = false;
+  let totalBanks    = 10;
+  let searchActive  = false;
+  let debounceTimer = null;
+
+  // ── DOM refs ──────────────────────────────────────────────────────
+  const inputEl   = () => document.getElementById('ch-search-input');
+  const clearBtn  = () => document.getElementById('ch-search-clear');
+  const statusEl  = () => document.getElementById('ch-search-status');
+
+  // ── Merge a loaded bank into allChannels ──────────────────────────
+  function mergeBank(bank, channels) {
+    // Remove any existing entries for this bank
+    allChannels = allChannels.filter(
+      ch => ch.channel < (bank - 1) * 50 + 1 || ch.channel > bank * 50
+    );
+    allChannels.push(...channels);
+    allChannels.sort((a, b) => a.channel - b.channel);
+    loadedBanks.add(bank);
+  }
+
+  // ── Background load all remaining banks ──────────────────────────
+  async function loadAllBanks(alreadyLoadedBank) {
+    if (isLoadingAll) return;
+    isLoadingAll = true;
+
+    for (let bank = 1; bank <= totalBanks; bank++) {
+      if (loadedBanks.has(bank)) continue;
+
+      updateStatus(
+        `Loading ${loadedBanks.size * 50}/${totalBanks * 50} for search…`,
+        'loading'
+      );
+
+      try {
+        const res  = await apiFetch(`/api/channels?bank=${bank}`);
+        if (res.success && res.data.channels) {
+          mergeBank(bank, res.data.channels);
+        }
+      } catch (_) {}
+
+      // Small yield between banks to keep UI responsive
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    isLoadingAll = false;
+
+    if (!searchActive) {
+      updateStatus(`${allChannels.length} channels ready`, 'ready');
+      // Fade out status after 3 seconds when idle
+      setTimeout(() => {
+        if (!searchActive && statusEl()) statusEl().textContent = '';
+      }, 3000);
+    } else {
+      // Re-run search now that all data is loaded
+      runSearch(inputEl()?.value || '');
+    }
+  }
+
+  // ── Status display ────────────────────────────────────────────────
+  function updateStatus(msg, cls = '') {
+    const el = statusEl();
+    if (!el) return;
+    el.textContent  = msg;
+    el.className    = 'ch-search-status ' + cls;
+  }
+
+  // ── Highlight matching text ───────────────────────────────────────
+  function highlight(text, query) {
+    if (!query || !text) return escHtml(text || '');
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re      = new RegExp(`(${escaped})`, 'gi');
+    return escHtml(text).replace(re, '<span class="ch-match">$1</span>');
+  }
+
+  function escHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // ── Run the search / filter ───────────────────────────────────────
+  function runSearch(query) {
+    const tbody = document.getElementById('ch-tbody');
+    if (!tbody) return;
+
+    const q = query.trim().toLowerCase();
+
+    if (!q) {
+      // Empty query — restore normal bank view
+      searchActive = false;
+      updateStatus(
+        loadedBanks.size < totalBanks
+          ? `Loading ${loadedBanks.size * 50}/${totalBanks * 50}…`
+          : '',
+        loadedBanks.size < totalBanks ? 'loading' : ''
+      );
+      // Re-render the current bank
+      if (chState.channels.length) {
+        renderChannels(chState.channels);
+      } else {
+        tbody.innerHTML = '<tr><td colspan="10" class="ch-empty">Select a bank and click Load Bank</td></tr>';
+      }
+      return;
+    }
+
+    searchActive = true;
+
+    // Filter across all loaded channels
+    const results = allChannels.filter(ch => {
+      const name = (ch.name || '').toLowerCase();
+      const freq = ch.frequency_mhz > 0 ? ch.frequency_mhz.toFixed(4) : '';
+      const mod  = (ch.modulation || '').toLowerCase();
+      return name.includes(q) || freq.includes(q) || mod.includes(q);
+    });
+
+    // Partial results warning
+    const partial = loadedBanks.size < totalBanks;
+    if (partial) {
+      updateStatus(
+        `${results.length} found (${loadedBanks.size * 50}/500 searched)`,
+        'loading'
+      );
+    } else {
+      updateStatus(
+        results.length === 0
+          ? 'No results'
+          : `${results.length} of 500 match`,
+        'results'
+      );
+    }
+
+    if (results.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="10" class="ch-search-empty">
+        No channels match "${escHtml(query)}"
+        ${partial ? '<br><small>Still loading — more results may appear</small>' : ''}
+      </td></tr>`;
+      return;
+    }
+
+    // Render results with bank badges and highlighted matches
+    tbody.innerHTML = results.map(ch => {
+      const bank     = Math.ceil(ch.channel / 50);
+      const freqStr  = ch.frequency_mhz > 0 ? ch.frequency_mhz.toFixed(4) + ' MHz' : '—';
+      const nameHl   = highlight(ch.name || '', query);
+      const freqHl   = ch.frequency_mhz > 0
+        ? highlight(ch.frequency_mhz.toFixed(4) + ' MHz', query)
+        : '—';
+      const modHl    = highlight(ch.modulation || '', query);
+
+      const starred = window.Favorites && window.Favorites.isFavorited(ch.channel);
+      return `
+        <tr data-ch="${ch.channel}">
+          <td><button class="ch-star-btn ${starred ? 'starred' : ''}" data-ch="${ch.channel}" title="${starred ? 'Remove from' : 'Add to'} favorites">${starred ? '★' : '☆'}</button></td>
+          <td class="ch-num">
+            ${ch.channel}
+            <span class="ch-bank-badge">B${bank}</span>
+          </td>
+          <td class="ch-name">${nameHl || '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td class="ch-freq">${freqHl}</td>
+          <td>${modHl || '—'}</td>
+          <td>${ch.ctcss_dcs && ch.ctcss_dcs !== '0' ? escHtml(ch.ctcss_dcs) : '—'}</td>
+          <td>${ch.delay ?? '2'}s</td>
+          <td><span class="ch-badge ${ch.locked_out ? 'on' : ''}">${ch.locked_out ? 'YES' : 'no'}</span></td>
+          <td><span class="ch-badge ${ch.priority ? 'on' : ''}">${ch.priority ? 'YES' : 'no'}</span></td>
+          <td>
+            <div style="display:flex;gap:4px">
+              <button class="ch-action-btn jump" data-ch="${ch.channel}">Jump</button>
+              <button class="ch-action-btn edit" data-ch="${ch.channel}">Edit</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+
+    // Wire star buttons
+    tbody.querySelectorAll('.ch-star-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ch = results.find(c => c.channel === parseInt(btn.dataset.ch));
+        if (ch && window.Favorites) window.Favorites.toggle(ch);
+      });
+    });
+
+    // Wire jump and edit buttons on search results
+    tbody.querySelectorAll('.jump').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const ch  = parseInt(btn.dataset.ch);
+        const res = await apiFetch(`/api/channel/${ch}`, 'POST');
+        if (window.logEntry) {
+          logEntry(
+            res.success ? `Jumped to CH ${ch}` : `Jump failed — ${res.message}`,
+            res.success ? 'ok' : 'err'
+          );
+        }
+      });
+    });
+
+    tbody.querySelectorAll('.edit').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ch = allChannels.find(c => c.channel === parseInt(btn.dataset.ch));
+        if (ch) openEditModal(ch);
+      });
+    });
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────
+  function init() {
+    const input = inputEl();
+    const clear = clearBtn();
+    if (!input) return;
+
+    // Debounced input handler
+    input.addEventListener('input', () => {
+      const val = input.value;
+      clear?.classList.toggle('visible', val.length > 0);
+
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => runSearch(val), 200);
+    });
+
+    // Clear button
+    clear?.addEventListener('click', () => {
+      input.value = '';
+      clear.classList.remove('visible');
+      runSearch('');
+      input.focus();
+    });
+
+    // Escape key clears search
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        input.value = '';
+        clear?.classList.remove('visible');
+        runSearch('');
+        input.blur();
+      }
+    });
+  }
+
+  // ── Public API ────────────────────────────────────────────────────
+  return {
+    init,
+    mergeBank,
+    loadAllBanks,
+    updateStatus,
+    get isSearching() { return searchActive && (inputEl()?.value || '').trim().length > 0; },
+    get fullyLoaded()  { return loadedBanks.size >= totalBanks; },
+    getAllChannels()   { return allChannels; },
+    updateChannelInCache(updated) {
+      const idx = allChannels.findIndex(c => c.channel === updated.channel);
+      if (idx !== -1) allChannels[idx] = { ...allChannels[idx], ...updated };
+    },
+  };
+
+})();
+
+window.ChSearch = Search;
+
 /* BC125AT — channels.js  Phase 6 channel manager */
 
 const chState = {
@@ -33,6 +309,15 @@ document.querySelectorAll('.bank-btn').forEach(btn => {
     const start = (chState.currentBank - 1) * 50 + 1;
     const end   = chState.currentBank * 50;
     if (chEls.rangeLabel) chEls.rangeLabel.textContent = `CH ${start}–${end}`;
+
+    // Clear search when switching banks
+    const searchInput = document.getElementById('ch-search-input');
+    const searchClear = document.getElementById('ch-search-clear');
+    if (searchInput && searchInput.value) {
+      searchInput.value = '';
+      searchClear?.classList.remove('visible');
+      if (window.ChSearch) ChSearch.updateStatus('');
+    }
   });
 });
 
@@ -52,7 +337,7 @@ async function loadBank(bank) {
 
   if (chEls.tbody) {
     chEls.tbody.innerHTML = `
-      <tr><td colspan="9" class="ch-loading">
+      <tr><td colspan="10" class="ch-loading">
         <div class="ch-progress-wrap">
           <div class="ch-progress-bar" id="ch-progress-bar"></div>
         </div>
@@ -82,13 +367,30 @@ async function loadBank(bank) {
 
   if (!res.success) {
     if (chEls.tbody) {
-      chEls.tbody.innerHTML = `<tr><td colspan="9" class="ch-empty">Failed to load — ${res.message}</td></tr>`;
+      chEls.tbody.innerHTML = `<tr><td colspan="10" class="ch-empty">Failed to load — ${res.message}</td></tr>`;
     }
     return;
   }
 
   chState.channels = res.data.channels;
   renderChannels(chState.channels);
+
+  // Merge loaded bank into search cache
+  if (window.ChSearch) {
+    ChSearch.mergeBank(bank, chState.channels);
+    // Start background loading of all other banks (no-op if already running)
+    ChSearch.loadAllBanks(bank);
+  }
+
+  // Update lockout count badge as more banks load
+  if (window.Lockouts) Lockouts.updateCount();
+
+  // Re-run discovery tagging now that more channel data is available
+  if (window.Discovery && window.History) {
+    const pane = document.getElementById('tab-history');
+    if (pane && pane.classList.contains('active')) History.render();
+    else Discovery.updateBadge(History.entries || []);
+  }
 }
 
 /* ── Render table ── */
@@ -96,12 +398,15 @@ function renderChannels(channels) {
   if (!chEls.tbody) return;
 
   if (!channels.length) {
-    chEls.tbody.innerHTML = '<tr><td colspan="9" class="ch-empty">No channels found</td></tr>';
+    chEls.tbody.innerHTML = '<tr><td colspan="10" class="ch-empty">No channels found</td></tr>';
     return;
   }
 
-  chEls.tbody.innerHTML = channels.map(ch => `
+  chEls.tbody.innerHTML = channels.map(ch => {
+    const starred = window.Favorites && window.Favorites.isFavorited(ch.channel);
+    return `
     <tr data-ch="${ch.channel}">
+      <td><button class="ch-star-btn ${starred ? 'starred' : ''}" data-ch="${ch.channel}" title="${starred ? 'Remove from' : 'Add to'} favorites">${starred ? '★' : '☆'}</button></td>
       <td class="ch-num">${ch.channel}</td>
       <td class="ch-name">${ch.name || '<span style="color:var(--text-muted)">—</span>'}</td>
       <td class="ch-freq">${ch.frequency_mhz > 0 ? ch.frequency_mhz.toFixed(4) + ' MHz' : '—'}</td>
@@ -117,7 +422,16 @@ function renderChannels(channels) {
         </div>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
+
+  // Wire star buttons
+  chEls.tbody.querySelectorAll('.ch-star-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ch = channels.find(c => c.channel === parseInt(btn.dataset.ch));
+      if (ch && window.Favorites) window.Favorites.toggle(ch);
+    });
+  });
 
   // Wire jump buttons
   chEls.tbody.querySelectorAll('.jump').forEach(btn => {
@@ -210,6 +524,11 @@ if (chEls.loadBtn) {
 
 /* Expose for tabs.js */
 window.loadBank = loadBank;
+
+/* Initialise search on first call */
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.ChSearch) ChSearch.init();
+});
 
 
 /* ════════════════════════════════════════
@@ -465,3 +784,236 @@ if (importSsInput) {
     }
   });
 }
+
+
+/* ════════════════════════════════════════════════════════
+   Lockout Manager
+   ════════════════════════════════════════════════════════
+
+   Reuses the ChSearch background loader's allChannels cache.
+   Toggling "Lockouts" filters the table to show only channels
+   with locked_out=true across all 500, regardless of which
+   bank is currently loaded.
+*/
+
+const Lockouts = (() => {
+
+  let active = false;
+
+  function getLockedChannels() {
+    // Access the shared cache from ChSearch via its internal state
+    // We re-read it through a small accessor since allChannels is
+    // private inside the ChSearch IIFE
+    return (window.ChSearch && window.ChSearch.getAllChannels)
+      ? window.ChSearch.getAllChannels().filter(c => c.locked_out)
+      : [];
+  }
+
+  function updateCount() {
+    const countEl = document.getElementById('ch-lockout-count');
+    if (!countEl) return;
+    const locked = getLockedChannels();
+    countEl.textContent = locked.length > 0 ? locked.length : '';
+  }
+
+  function render() {
+    const tbody = document.getElementById('ch-tbody');
+    if (!tbody) return;
+
+    const locked = getLockedChannels();
+    updateCount();
+
+    if (locked.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="10" class="ch-search-empty">
+        No locked-out channels${
+          window.ChSearch && !window.ChSearch.fullyLoaded
+            ? '<br><small>Still loading all banks — more may appear</small>'
+            : ''
+        }
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = locked.map(ch => {
+      const bank    = Math.ceil(ch.channel / 50);
+      const freqStr = ch.frequency_mhz > 0 ? ch.frequency_mhz.toFixed(4) + ' MHz' : '—';
+      const starred = window.Favorites && window.Favorites.isFavorited(ch.channel);
+
+      return `
+        <tr data-ch="${ch.channel}">
+          <td><button class="ch-star-btn ${starred ? 'starred' : ''}" data-ch="${ch.channel}" title="${starred ? 'Remove from' : 'Add to'} favorites">${starred ? '★' : '☆'}</button></td>
+          <td class="ch-num">
+            ${ch.channel}
+            <span class="ch-bank-badge">B${bank}</span>
+          </td>
+          <td class="ch-name">${ch.name || '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td class="ch-freq">${freqStr}</td>
+          <td>${ch.modulation || '—'}</td>
+          <td>${ch.ctcss_dcs && ch.ctcss_dcs !== '0' ? ch.ctcss_dcs : '—'}</td>
+          <td>${ch.delay ?? '2'}s</td>
+          <td><span class="ch-badge on">YES</span></td>
+          <td><span class="ch-badge ${ch.priority ? 'on' : ''}">${ch.priority ? 'YES' : 'no'}</span></td>
+          <td>
+            <div style="display:flex;gap:4px">
+              <button class="ch-action-btn unlock" data-ch="${ch.channel}">Unlock</button>
+              <button class="ch-action-btn edit" data-ch="${ch.channel}">Edit</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+
+    // Wire star buttons
+    tbody.querySelectorAll('.ch-star-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ch = getLockedChannels().find(c => c.channel === parseInt(btn.dataset.ch));
+        if (ch && window.Favorites) window.Favorites.toggle(ch);
+      });
+    });
+
+    // Wire unlock buttons
+    tbody.querySelectorAll('.unlock').forEach(btn => {
+      btn.addEventListener('click', () => unlockChannel(parseInt(btn.dataset.ch)));
+    });
+
+    // Wire edit buttons
+    tbody.querySelectorAll('.edit').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ch = getLockedChannels().find(c => c.channel === parseInt(btn.dataset.ch));
+        if (ch) openEditModal(ch);
+      });
+    });
+  }
+
+  async function unlockChannel(chNum) {
+    const ch = getLockedChannels().find(c => c.channel === chNum);
+    if (!ch) return;
+
+    const res = await apiFetch(`/api/channel/${chNum}`, 'PUT', {
+      name:         ch.name,
+      frequency_hz: ch.frequency_hz,
+      modulation:   ch.modulation,
+      ctcss_dcs:    ch.ctcss_dcs,
+      delay:        ch.delay,
+      locked_out:   false,
+      priority:     ch.priority,
+    });
+
+    if (res.success) {
+      if (window.logEntry) logEntry(`Channel ${chNum} unlocked`, 'ok');
+      // Update cache
+      ch.locked_out = false;
+      if (window.ChSearch) window.ChSearch.updateChannelInCache(ch);
+      render();
+    } else {
+      if (window.logEntry) logEntry(`Unlock failed — ${res.message}`, 'err');
+    }
+  }
+
+  async function unlockAll() {
+    const locked = getLockedChannels();
+    if (locked.length === 0) return;
+
+    const confirmed = confirm(
+      `Unlock all ${locked.length} locked-out channels?\n\n` +
+      `This will write to the scanner and may take a moment.`
+    );
+    if (!confirmed) return;
+
+    const btn = document.getElementById('ch-unlock-all');
+    if (btn) { btn.disabled = true; btn.textContent = 'Unlocking…'; }
+    if (window.logEntry) logEntry(`Unlocking ${locked.length} channels…`, 'info');
+
+    const payload = locked.map(ch => ({
+      channel:    ch.channel,
+      name:       ch.name,
+      freq_hz:    ch.frequency_hz,
+      modulation: ch.modulation,
+      ctcss_dcs:  ch.ctcss_dcs,
+      delay:      ch.delay,
+      locked_out: false,
+      priority:   ch.priority,
+    }));
+
+    // Use channel import endpoint's bulk write via CSV-style payload
+    // Reuse set_channels_bulk through a lightweight bulk-unlock endpoint
+    try {
+      const res = await fetch('/api/channels/bulk-unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channels: locked.map(c => c.channel) }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        locked.forEach(ch => {
+          ch.locked_out = false;
+          if (window.ChSearch) window.ChSearch.updateChannelInCache(ch);
+        });
+        if (window.logEntry) logEntry(`Unlocked ${data.data.written} channels`, 'ok');
+        render();
+      } else {
+        if (window.logEntry) logEntry(`Bulk unlock failed — ${data.message}`, 'err');
+      }
+    } catch (e) {
+      if (window.logEntry) logEntry(`Bulk unlock error — ${e.message}`, 'err');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Unlock All'; }
+    }
+  }
+
+  function toggle() {
+    active = !active;
+    const btn = document.getElementById('ch-lockout-toggle');
+    if (btn) btn.classList.toggle('active', active);
+
+    if (active) {
+      // Clear search if active
+      const searchInput = document.getElementById('ch-search-input');
+      if (searchInput && searchInput.value) {
+        searchInput.value = '';
+        document.getElementById('ch-search-clear')?.classList.remove('visible');
+      }
+      // Deselect bank buttons
+      document.querySelectorAll('.bank-btn').forEach(b => b.classList.remove('active'));
+      render();
+      showUnlockAllButton();
+    } else {
+      hideUnlockAllButton();
+      // Restore normal bank view
+      if (chState.channels.length) {
+        renderChannels(chState.channels);
+        document.querySelector(`.bank-btn[data-bank="${chState.currentBank}"]`)?.classList.add('active');
+      }
+    }
+  }
+
+  function showUnlockAllButton() {
+    if (document.getElementById('ch-unlock-all')) return;
+    const toolbar = document.querySelector('.ch-toolbar-right');
+    if (!toolbar) return;
+    const btn = document.createElement('button');
+    btn.id        = 'ch-unlock-all';
+    btn.className = 'key key--nav';
+    btn.textContent = 'Unlock All';
+    btn.addEventListener('click', unlockAll);
+    toolbar.appendChild(btn);
+  }
+
+  function hideUnlockAllButton() {
+    document.getElementById('ch-unlock-all')?.remove();
+  }
+
+  function init() {
+    const btn = document.getElementById('ch-lockout-toggle');
+    if (btn) btn.addEventListener('click', toggle);
+  }
+
+  return { init, render, updateCount, get isActive() { return active; } };
+
+})();
+
+window.Lockouts = Lockouts;
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.Lockouts) Lockouts.init();
+});

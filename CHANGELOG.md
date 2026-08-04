@@ -7,6 +7,1129 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.7.29] — Scanner Audio Streaming
+
+### Added
+- `api/stream.py` — audio streaming backend module
+- `GET /stream/audio` — infinite chunked HTTP response streaming raw PCM
+  audio from the system default input (same line-in used for recording)
+  with a WAV header prepended so browsers can decode it natively
+- **Live Audio** toggle in the Dashboard Recording panel — ON/OFF button
+  identical in style to Auto-Record and Smart Resume toggles
+- Small native `<audio>` element appears when streaming is ON — the
+  browser's built-in player handles buffering, volume, and controls
+- Status text shows: Connecting… → ● Live → Buffering… / error messages
+- CSS `filter: invert(1) hue-rotate(180deg)` applied to the `<audio>`
+  element to make the browser's native player match the dark UI theme
+
+#### Architecture — HTTP chunked streaming
+Used HTTP chunked transfer rather than WebSocket for maximum simplicity
+and browser compatibility. The browser treats `/stream/audio` exactly
+like an internet radio stream. No encoding library required — raw 16-bit
+PCM at 44100 Hz mono is sent directly after a 44-byte WAV header.
+
+Key design decisions:
+- **Single shared sounddevice stream** — only one `InputStream` is opened
+  regardless of how many browser tabs connect. All clients subscribe to
+  a broadcast queue; the stream stops automatically when the last client
+  disconnects
+- **Cache-busting param** on `audio.src` prevents the browser from
+  serving a stale cached stream on reconnect
+- **Autoplay catch** — if the browser blocks autoplay (common security
+  policy), the player shows "Click play to start" rather than silently
+  failing
+- **`X-Accel-Buffering: no`** header disables nginx proxy buffering
+  if the app is ever deployed behind a reverse proxy
+- WAV chunk_size set to `0xFFFFFFFF` (max uint32) rather than
+  `data_size + 36` to avoid integer overflow in `struct.pack`
+
+#### Requirements
+- Same line-in connection already used for recording
+- `sounddevice` already installed (same dependency as manual recording)
+- No additional Python packages needed
+
+### Changed
+- `app.py` — `stream_audio()` route added; imports `audio_stream_generator`
+  from `api.stream`; returns `Response(stream_with_context(...), mimetype="audio/wav")`
+- `templates/index.html` — Live Audio row and audio player div added to
+  Recording panel below Auto-Record
+- `static/js/main.js` — `AudioStream` module appended with `start()`,
+  `stop()`, `toggle()`, `init()`; wired to toggle button click
+- `static/css/style.css` — `.audio-stream-row`, `.audio-stream-player`,
+  `.audio-stream-status` styles added; `audio { filter: invert }` for
+  dark theme compatibility
+
+---
+
+## [0.7.28] — Mini Heatmap on Dashboard
+
+### Added
+- **Mini Signal Heatmap** on the Dashboard — compact version of the Status
+  tab heatmap, placed in the empty space below the Backlight controls in
+  the levels panel
+- 6 condensed frequency bands × 24 hourly buckets (24 hours of activity)
+- Same green gradient color scheme as the full heatmap
+- Hover tooltip shows band, hour, and transmission count inline below
+  the grid (not a floating overlay, to keep the dashboard clean)
+- Auto-refreshes every 5 minutes while the Dashboard tab is open
+- Re-renders immediately whenever a new History entry is added, so it
+  stays live as transmissions are logged
+
+#### Differences from the full Status tab heatmap
+| | Full Heatmap | Mini Heatmap |
+|---|---|---|
+| Time buckets | 48 × 30 min | 24 × 60 min |
+| Frequency bands | 8 | 6 (merged some ranges) |
+| Cell height | 22px | 14px |
+| Tooltip | Fixed bottom overlay | Inline text below grid |
+| Location | Status tab | Dashboard levels panel |
+
+### Changed
+- `templates/index.html` — mini heatmap panel added to dashboard levels
+  column between Backlight and the right column divider
+- `static/js/status.js` — `MiniHeatmap` module appended with 6-band
+  config, 24-bucket grid builder, color function, render, and 5-min
+  auto-refresh interval
+- `static/js/main.js` — `MiniHeatmap.render()` called on
+  `DOMContentLoaded`
+- `static/js/history.js` — `MiniHeatmap.render()` called inside
+  `addEntry()` so the mini heatmap updates the moment a new
+  transmission is logged
+- `static/css/style.css` — `.mini-heatmap-group`, `.mini-heatmap-wrap`,
+  `.mini-heatmap-y`, `.mini-heatmap-grid`, `.mini-heatmap-cell`,
+  `.mini-heatmap-tooltip` styles added
+
+---
+
+## [0.7.27] — Signal Heatmap
+
+### Added
+- **Signal Heatmap** in the Status tab — 2D grid showing transmission
+  activity across frequency bands and time for the last 24 hours
+- Zero new backend code — reads directly from the existing
+  `bc125at_history` localStorage data
+
+#### Layout
+- **X axis:** last 24 hours divided into 48 × 30-minute buckets
+- **Y axis:** 8 frequency bands covering the BC125AT's full range:
+
+| Band | Range | Services |
+|---|---|---|
+| 25–50 MHz | VHF Low | CB, business |
+| 50–108 MHz | VHF | 6m amateur, FM broadcast |
+| 108–137 MHz | Air band | Aviation voice |
+| 137–174 MHz | VHF High | Public safety, amateur, NOAA |
+| 174–225 MHz | VHF UHF | TV, 1.25m amateur |
+| 225–400 MHz | Military | Military aviation |
+| 400–450 MHz | UHF Low | Public safety, business |
+| 450–512 MHz | UHF High | Public safety, amateur, business |
+
+- **Cell color:** dark background = no activity; green gradient scales
+  from dim (1 transmission) to bright (most active cell in the window)
+- **Hover tooltip:** shows exact frequency band, time range, and
+  transmission count for any cell
+- **Legend bar** in the header: None → Active gradient
+
+#### Technical details
+- `buildGrid()` bins each History entry into `[band][time_bucket]` using
+  the entry's `frequency` and `timestamp` fields
+- Color scaling is relative to the maximum count in the current window —
+  if the busiest cell has 5 transmissions, each step is 20% brightness
+- Cells outside the 24-hour window are ignored
+- Heatmap re-renders every time the Status tab is opened
+
+### Changed
+- `templates/index.html` — heatmap section added above the Recordings
+  section in the Status tab; contains y-axis, grid, x-axis, legend,
+  and tooltip elements
+- `static/js/status.js` — `Heatmap` module appended with `buildGrid()`,
+  `cellColor()`, `formatBucket()`, and `render()` functions; `render()`
+  called from `Status.render()`
+- `static/css/style.css` — `.heatmap-wrap`, `.heatmap-grid`,
+  `.heatmap-cell`, `.heatmap-y-axis`, `.heatmap-x-axis`,
+  `.heatmap-tooltip`, `.heatmap-legend` styles added
+
+---
+
+## [0.7.26] — Discovery Mode
+
+### Added
+- `static/js/discovery.js` — Discovery Mode module
+- **🔍 Discoveries** filter button in the History tab toolbar — same
+  style as the Lockouts toggle in the Channels tab
+- Discovery count badge on the toggle button — updates live as channels
+  load and as new transmissions are logged
+- **🔍 badge** in the first column of History rows for discovered
+  frequencies — subtle blue row highlight distinguishes them from normal entries
+- **+ Add** button on each discovery row — switches to the Channels tab
+  and opens the channel editor pre-filled with the discovered frequency
+  and modulation so you can program it with one action
+
+#### What counts as a discovery
+An entry is flagged as a discovery when **both** conditions are true:
+1. `channel_id === 0` — the scanner found it during Search mode, not
+   while scanning programmed channels
+2. The frequency doesn't match any programmed channel within ±5 kHz
+   (checked against the `ChSearch.getAllChannels()` cache — the same
+   500-channel cache loaded in the background by the Channels tab)
+
+If channels haven't loaded yet, nothing is flagged (avoids false
+positives). The tagging runs on every `History.render()` call so the
+badge and row highlights update as soon as more channel data arrives.
+
+#### How to use
+1. Open the Channels tab — channel data loads in the background
+2. Press Search (or `R`) to sweep your custom search ranges
+3. Frequencies found during search appear in History
+4. Unknown frequencies (not in your 500 programmed channels) are
+   flagged with a 🔍 badge and counted in the toolbar button
+5. Click **🔍 Discoveries** to filter the History table to unknowns only
+6. Click **+ Add** on any row to program it into a channel
+
+### Changed
+- `templates/base.html` — `discovery.js` added to script load order
+  (position 6, before `favorites.js` and `main.js`)
+- `templates/index.html` — Discoveries toggle button added to History
+  toolbar; blank `<th>` column added to History table header;
+  `colspan` updated from `7` to `8` on placeholder rows
+- `static/js/history.js` — `filtered()` now calls
+  `Discovery.tagEntries()`, `Discovery.updateBadge()`, and
+  `Discovery.filterEntries()` before applying text filter;
+  🔍 badge column and `+ Add` button rendered in each row;
+  `+ Add` button wiring calls `Discovery.openAddChannel()`;
+  `Discovery.init()` called from `History.init()`;
+  `entries` getter added to public API
+- `static/js/channels.js` — `Discovery.updateBadge()` called after
+  each bank loads so the badge stays current as channel data arrives
+- `static/css/style.css` — `.hist-discovery-row`, `.hist-disc-badge`,
+  `#hist-discovery-toggle.active` styles added
+
+---
+
+## [0.7.25] — Session Recording Bug Fix: Deadlock
+
+### Fixed
+Session recorder never started recording despite being enabled and the
+scanner dwelling on a frequency.
+
+**Root cause:** `on_state()` held `self._lock` while calling
+`_schedule_start()`, which created a `threading.Timer`. When the timer
+fired 0.8s later, `_start_if_still_dwelling()` tried to acquire
+`self._lock` — which was still held by the original thread. Classic
+deadlock: timer thread waited forever, recording never started, no error.
+
+**Fix:** Introduced a `start_timer` boolean flag set inside the lock,
+then called `_schedule_start()` after the lock is released. Timer fires
+cleanly, acquires lock, starts recording.
+
+Verified with a simulation: 5 state pushes → dwell timer fires after 0.8s
+→ frequency change detected → new timer started. No deadlock.
+
+### Changed
+- `recorder/session_recorder.py` — `on_state()` restructured: `start_timer`
+  flag set inside lock, `_schedule_start()` called after lock releases
+
+---
+
+## [0.7.24] — Session Recording Bug Fix: squelch_open Dependency
+
+### Fixed
+Session recorder never triggered because it watched `squelch_open` for
+the rising edge, same unreliable flag that broke History and Smart Resume.
+
+**Fix:** Replaced squelch_open trigger with frequency-stability tracking
+— identical approach to Activity History. Scanner must dwell on a
+frequency for `MIN_DWELL_S` (0.8s) before recording starts. When
+frequency changes, recording stops and duration is calculated.
+
+### Changed
+- `recorder/session_recorder.py` — `on_state()` rewritten with
+  `_dwell_freq`/`_dwell_start`/`_dwell_timer` state; `_schedule_start()`
+  and `_start_if_still_dwelling()` added; `enable()`/`disable()` reset
+  frequency tracking state; `MIN_DWELL_S`, `FREQ_TOLERANCE` constants added;
+  `squelch_open` removed from all functional code paths
+
+---
+
+## [0.7.23] — Session Recording
+
+### Added
+- `recorder/session_recorder.py` — `SessionRecorder` class that wraps the
+  existing manual `Recorder` and drives it automatically from squelch state
+- Every transmission that opens squelch gets its own WAV file, named with
+  a rich human-readable format: `2026-06-29_14-32-05_483.4125MHz_RCPD-Disp.wav`
+- JSON sidecar file written alongside each WAV after the tail completes:
+  `2026-06-29_14-32-05_483.4125MHz_RCPD-Disp.json` — contains timestamp,
+  frequency, channel ID, channel name, modulation, and duration in seconds
+- Transmissions shorter than 0.5 seconds (`MIN_DURATION_S`) are
+  automatically deleted after the tail — avoids saving noise bursts that
+  barely opened squelch
+- **Auto-Record toggle** in the Dashboard Recording panel — same green
+  ON/OFF button style as Smart Resume; state reflected live from the
+  scanner state push
+- **🔊 play button** in History tab rows — appears when a session recording
+  has been matched to that history entry (by timestamp + frequency proximity)
+- `matchRecordings()` in `history.js` — fetches the recordings index and
+  matches each recording to a history entry within ±10 seconds and ±5 kHz;
+  called on History tab init and every time the History tab is opened
+
+#### New API endpoints
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/session-recording/status` | Current session recording state |
+| POST | `/api/session-recording/enable` | Enable auto-recording |
+| POST | `/api/session-recording/disable` | Disable auto-recording |
+| GET | `/api/recordings/index` | All recordings with sidecar metadata |
+
+### Changed
+- `recorder/recorder.py` — `start()` now accepts optional `name` parameter;
+  if provided, it is used as the WAV filename directly (enables rich filenames
+  from `SessionRecorder`) instead of the default `YYYYMMDD_HHMMSS_ch_freq.wav`
+  scheme
+- `app.py` — `SessionRecorder` imported and instantiated; wired into
+  `on_scanner_state()` callback so every state push calls
+  `session_recorder.on_state(state)`; session recorder status included in
+  every `scanner_state` SocketIO push
+- `api/routes.py` — four new endpoints added; `config` import fixed in
+  `recordings_index()` (same issue as v0.7.13 status page fix)
+- `templates/index.html` — Auto-Record row added below manual record buttons
+- `static/js/main.js` — `toggleSessionRecording()`, `applySessionRecState()`
+  added; toggle click handler wired
+- `static/js/socket.js` — `applySessionRecState(state)` called in
+  `scanner_state` handler
+- `static/js/history.js` — `matchRecordings()` added and exported; 🔊 play
+  button rendered in status column when `recording_url` is set on entry;
+  called from `init()` and History public API
+- `static/js/tabs.js` — `History.matchRecordings()` called when History
+  tab opens
+- `static/css/style.css` — `.session-rec-row`, `.session-rec-status`,
+  `.hist-play-btn` styles added
+
+---
+
+## [0.7.22] — Smart Resume: Immediate Skip on Block
+
+### Fixed
+When a frequency was blocked while the scanner was already sitting on it,
+the scanner did not move. The auto-skip fires on squelch rising edge — but
+that edge had already fired before the block was added, so nothing happened
+until the next time the scanner returned to that frequency.
+
+**Fix:** `blockFreq()` now checks immediately after adding a frequency
+whether `lastState.frequency_mhz` matches the newly blocked frequency
+(within ±5 kHz). If it does, `sendResume()` is called right away without
+waiting for the next rising edge.
+
+### Changed
+- `static/js/smartresume.js` — `blockFreq()` calls `sendResume()` and
+  shows status message if current frequency matches the one just blocked
+
+---
+
+## [0.7.21] — Smart Resume: Block Button Always Visible
+
+### Fixed
+The block button (⊘ Block X.XXXX MHz) never appeared because it was gated
+behind `squelch_open === true`. With squelch at higher settings the scanner
+rarely registers squelch as open in the state push, so the button was
+almost never visible.
+
+**Fix:** The block button now shows whenever Smart Resume is ON and there
+is a valid frequency on screen. The `squelch_open` check is retained only
+for the auto-skip rising-edge logic where it belongs. Manual blocking does
+not require squelch to be open.
+
+### Changed
+- `static/js/smartresume.js` — `updateBlockBtn()` signature changed from
+  `(freq_mhz, sqlOpen)` to `(freq_mhz)`; `sqlOpen` guard removed from
+  button visibility; call site updated to `updateBlockBtn(freq)`
+- `templates/index.html` — block button moved above status text in panel
+  for better visibility
+
+---
+
+## [0.7.20] — Smart Resume Rewrite: Frequency Blocklist Engine
+
+### Changed — Complete architectural rethink
+
+After multiple iterations of audio-based Voice Activity Detection (VAD)
+producing unreliable results (misclassifying noise as voice and vice versa
+~97% of the time), Smart Resume has been fundamentally redesigned.
+
+**Why VAD failed for this use case:**
+Radio noise — intermod, CB interference, band noise, carrier hum — is a
+modulated signal with spectral structure. Every audio property we measured
+(ZCR, silence ratio, spectral variance, amplitude variance) produced values
+that overlapped significantly between real voice and the types of noise
+found on a scanner. Browser-based audio analysis on a consumer line-in
+cannot reliably distinguish radio noise from voice without hardware-level
+carrier deviation and tone detection that the BC125AT does not expose over
+serial.
+
+**New approach — Frequency Blocklist:**
+Smart Resume is now a blocklist engine. When it is ON and squelch opens on
+a frequency that is in the blocklist, the resume key is sent **instantly**
+— no audio analysis, no waiting, no false positives. Every other frequency
+is left completely alone.
+
+This mirrors how experienced scanner users actually handle persistent noise:
+identify the offending frequencies and lockout or skip them rather than
+trying to detect them automatically in real time.
+
+#### How to use
+1. Enable Smart Resume (toggle ON)
+2. Scan normally — when squelch opens on a noisy frequency, a red
+   **⊘ Block X.XXXX MHz** button appears in the Smart Resume panel
+3. Click it — that frequency is immediately added to the blocklist
+4. Next time squelch opens on that frequency, Smart Resume skips it instantly
+5. Click **Manage** to see all blocked frequencies and remove any individually
+6. **⊘** buttons also appear on every row in the History tab — block any
+   previously logged frequency directly from the transmission history
+
+#### Technical details
+- Match tolerance: ±5 kHz (BC125AT minimum step size) — handles slight
+  frequency drift without false matches
+- Skip behaviour: instant on squelch rising edge, no delay
+- Resume key: `KEY,R` (search) if scanner is in search mode,
+  `KEY,S` (scan) if in channel scan mode — preserves the current mode
+- Storage: `localStorage` keys `bc125at_sr_enabled` and `bc125at_sr_blocked`
+- Maximum 50 blocked frequencies
+- Toggle/unblock also available from the button (shows ✓ if already blocked)
+
+### Removed
+- All Web Audio API code (AudioContext, AnalyserNode, FFT, time-domain data)
+- ZCR (Zero Crossing Rate) algorithm
+- Silence ratio tracking
+- Spectral variance analysis
+- Amplitude variance over time
+- Sensitivity slider and sensitivity readout label
+- All associated CSS for VAD indicator states
+
+### Files changed
+- `static/js/smartresume.js` — complete rewrite (~300 lines → ~200 lines)
+- `templates/index.html` — Smart Resume panel simplified: removed slider,
+  indicator, and feedback row; added block button, count badge, manage
+  button, blocklist panel, and clear-all button
+- `static/js/history.js` — ⊘ block button added to each History row;
+  wired to `SmartResume.blockFreq()` / `SmartResume.unblockFreq()`
+- `static/css/style.css` — VAD CSS removed; blocklist panel, block button,
+  and row styles added
+
+---
+
+## [0.7.19] — Smart Resume: Restore Output on Squelch Close
+
+### Fixed
+
+#### "Noise — resuming" / "Voice — staying" messages and activity log entries
+stopped appearing after v0.7.18 squelch guard was added.
+
+**Root cause:** When squelch closed mid-analysis (transmission shorter than
+the full 800ms dwell + 2.5s window = ~3.3s), the new squelch guard called
+`stopListening()` and returned — silently discarding all the votes collected
+so far without ever calling `decide()`. No activity log entry, no status
+display text, no indicator — the user had no visibility into what Smart
+Resume was doing.
+
+**Fix:** When squelch closes while analysis is already running, call
+`stopListening()` to stop sampling frames, then immediately call `decide()`
+with whatever votes have been collected so far rather than discarding them.
+This produces the correct output in all cases:
+- Transmission > 3.3s — full 2.5s window completes naturally → `decide()`
+- Transmission 0.8s–3.3s — squelch closes mid-window → early `decide()`
+  with partial votes → still logs "Voice — staying" or "Noise — resuming"
+- Transmission < 0.8s — squelch closes before dwell timer fires →
+  timer cleared, `decide()` not called (no votes = no decision, correct)
+- No signal — squelch never opens → guard returns immediately, silent
+
+### Changed
+- `static/js/smartresume.js` — squelch-close branch in `onState()`:
+  if `isListening`, calls `stopListening()` then `decide()` (early
+  decision); if not yet listening, just clears the pending dwell timer
+
+---
+
+## [0.7.18] — Smart Resume Root Cause Fix: Squelch Guard
+
+### Fixed
+
+#### Smart Resume auto-scanning even without a signal
+
+The v0.7.17 grace period was a workaround, not the actual fix. The real
+root cause was a fundamental design flaw in the VAD trigger logic.
+
+**Root cause:** `onState()` started the dwell timer on every frequency the
+scanner paused on, regardless of whether squelch was open or not. When the
+scanner is actively scanning and briefly stops on each channel (squelch
+**closed**, no signal), Smart Resume would still fire after 800ms and run
+the 2.5 second audio analysis. With squelch closed, the audio is
+near-silent, producing low ZCR and low amplitude variance — which the
+decision logic classified as neither voice nor noise, but defaulted the
+`else` branch to `noiseVotes++`. After 2.5 seconds of silence,
+`noiseVotes` won the majority vote and `KEY,scan` was sent — even though
+there was never a signal at all.
+
+**Fix:** `onState()` now checks `squelch_open` before doing anything.
+
+```
+if (!squelch_open) {
+  // Cancel any analysis in progress
+  // Clear dwell timer
+  return;
+}
+// Only reach here when a signal is actually breaking squelch
+```
+
+Three scenarios now work correctly:
+
+| Scenario | Result |
+|---|---|
+| Scanner scanning, squelch closed (no signal) | Immediate return — no timer, no VAD |
+| Scanner stops on signal (squelch opens) | Dwell timer starts → VAD analysis |
+| Squelch opens then closes before 2.5s window | Analysis cancelled, timer cleared |
+
+The v0.7.17 grace period (`SR_GRACE_MS = 5000`) and mode-aware resume key
+(`KEY,R` for search mode vs `KEY,S` for scan mode) are both retained as
+they remain useful for their intended purposes.
+
+### Changed
+- `static/js/smartresume.js` — `onState()` completely reworked:
+  - Reads `sqlOpen = !!state.squelch_open` on every call
+  - If squelch is closed: cancels any active listening, clears dwell timer,
+    resets `srDwellFreq`, returns immediately
+  - Only starts dwell timer when squelch is open
+  - Timer callback double-checks `srLastState?.squelch_open` before calling
+    `startListening()` to guard against the rare case where squelch closes
+    between when the timer was set and when it fires
+  - Console log updated: `[SmartResume] Signal on X MHz for 800 ms — starting VAD`
+  - `[SmartResume] Squelch closed — analysis cancelled` logged when falling
+    edge cancels an in-progress analysis
+
+---
+
+## [0.7.17] — Smart Resume Bug Fixes: Grace Period + Mode-Aware Resume
+
+### Fixed
+
+#### Bug 1 — Smart Resume auto-scans immediately on page load
+**Root cause:** `srDwellFreq` starts as `null`. When the very first scanner
+state push arrives after page load, `onState()` sets the dwell timer
+immediately. 800ms later `startListening()` fires, analyses whatever audio
+is present (often ambient noise since the line-in is always open), decides
+NOISE, and sends `KEY,scan` — making it appear the page automatically
+started scanning on its own.
+
+**Fix:** A 5-second startup grace period (`SR_GRACE_MS = 5000`). The
+module records `srStartedAt = Date.now()` when it loads. `onState()` now
+returns immediately if `Date.now() - srStartedAt < SR_GRACE_MS`. After
+5 seconds the scanner has settled and the user has had time to interact
+before Smart Resume begins listening.
+
+#### Bug 2 — Custom search range reverts to channel scan mid-search
+**Root cause:** When Smart Resume decided a search-mode frequency was noise,
+it always sent `KEY,S` (scan). On the BC125AT, pressing `S` puts the scanner
+into **channel scan mode** regardless of what mode it was previously in. So
+every time Smart Resume skipped a noisy frequency during a custom search, it
+accidentally kicked the scanner back to scanning programmed channels.
+
+**Fix:** Mode detection before sending the resume key. Smart Resume now
+tracks the full last state in `srLastState`. When deciding to skip:
+- If `channel_id === 0` → scanner is in search/service mode → sends `KEY,R`
+  (search) to continue searching the custom range
+- If `channel_id > 0` → scanner is in channel scan mode → sends `KEY,S`
+  (scan) as before
+
+The console now logs `[SmartResume] Resuming via KEY search (channel_id: 0)`
+or `[SmartResume] Resuming via KEY scan (channel_id: 42)` for visibility.
+
+### Changed
+- `static/js/smartresume.js`:
+  - `SR_GRACE_MS = 5000` constant and `srStartedAt = Date.now()` added at
+    module scope
+  - `srLastState = null` added to track latest full scanner state
+  - `onState()` — early return if within grace period; sets `srLastState`
+    on every call
+  - `decide()` — `inSearchMode` check on `srLastState.channel_id`;
+    `resumeKey` variable replaces hardcoded `'scan'`; fetch now uses
+    template literal `` `/api/key/${resumeKey}` ``
+
+---
+
+## [0.7.16] — Search Range Programming
+
+### Added
+- **Custom Search Ranges panel** in the Settings tab — define and manage
+  all 10 of the BC125AT's custom search frequency ranges directly from the
+  browser, without touching the scanner's physical menu system
+
+#### New scanner commands (`scanner/commands.py`)
+Three genuine BC125AT serial commands confirmed against the official
+protocol PDF (`BC125AT_Protocol.pdf`, Appendix C):
+- **`CSG`** — Get/Set Custom Search Group: a 10-digit string controlling
+  which of the 10 custom search ranges are enabled (wire encoding is
+  inverted — `0`=enabled, `1`=disabled — normalised to friendly booleans)
+- **`CSP`** — Get/Set Custom Search Settings: lower/upper frequency limits
+  for a given search range index (1–10), in the same `×100 Hz` wire format
+  used throughout the rest of the app
+- **`SCO`** — Get/Set Search/Close Call Settings: search delay time and
+  CTCSS/DCS search toggle
+
+New functions: `get_custom_search_groups()`, `set_custom_search_groups()`,
+`get_custom_search_range()`, `set_custom_search_range()`,
+`get_all_custom_search_ranges()` (fetches all 10 ranges + enabled state in
+one program mode session), `get_search_settings()`, `set_search_settings()`
+
+#### New API endpoints
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/search/ranges` | Fetch all 10 custom search ranges |
+| PUT | `/api/search/ranges/<index>` | Set lower/upper limits for one range |
+| POST | `/api/search/groups` | Enable/disable ranges (10 booleans) |
+| GET | `/api/search/settings` | Get search delay + CTCSS/DCS search toggle |
+| POST | `/api/search/settings` | Set search delay + CTCSS/DCS search toggle |
+
+#### UI
+- 10-row list, each with an enable checkbox, lower MHz input, upper MHz
+  input, and individual Save button
+- Disabled ranges visually dim using `:has()` CSS selector targeting the
+  unchecked toggle
+- Validation client-side and server-side: lower must be less than upper,
+  both must fall within 25.0000–512.0000 MHz, and at least one range must
+  remain enabled at all times (matches the scanner's own restriction —
+  it rejects disabling all 10 with `NG`)
+- Search delay selector (-10 to 5 seconds) and CTCSS/DCS Search checkbox,
+  saved together via the `SCO` command
+- Refresh button reloads all 10 ranges from the scanner on demand
+- Search ranges load automatically whenever the Settings tab is opened,
+  alongside the existing serial/scan-group/priority settings
+
+### Changed
+- `scanner/scanner.py` — six new methods added mirroring the command
+  functions; `get_all_custom_search_ranges()` pauses the background poll
+  thread for the duration, same pattern as bulk channel reads
+- `api/routes.py` — five new endpoints appended
+- `templates/index.html` — Custom Search Ranges panel added to Settings
+  tab, positioned after Priority Mode
+- `static/js/settings.js` — `loadSearchRanges()`, `renderSearchRanges()`,
+  `saveSearchRange()`, `applySearchRangeToggles()` added; hooked into the
+  existing `loadSettings()` function
+- `static/css/style.css` — `.search-ranges-header`, `.search-range-row`,
+  `.sr-range-toggle`, `.sr-range-num`, `.search-settings-row` styles added
+  with mobile responsive grid-area layout
+
+### Research note
+This feature was previously uncertain — the official protocol PDF was
+re-checked specifically to confirm `CSG`/`CSP`/`SCO` exist as real,
+documented commands before any code was written, following the lesson
+learned from the Weather/Down key issue in v0.7.5 where assuming
+functionality without scanner confirmation led to a broken feature.
+
+---
+
+## [0.7.15] — Favorites Manager / Quick-Access Bar
+
+### Added
+- `static/js/favorites.js` — self-contained favorites module, persisted to
+  `localStorage` (key `bc125at_favorites`), capped at 10 favorites
+- **★ Star button** added as the first column in every channel table view:
+  normal bank browsing, search results, and the Lockout Manager — click to
+  pin or unpin a channel from anywhere in the Channels tab
+- **Favorites bar** on the Dashboard — built directly into the display
+  panel below the frequency readout and status icons. Shows a chip for
+  each pinned channel with channel number, name, and frequency
+- Clicking a favorite chip instantly jumps the scanner to that channel via
+  the existing `POST /api/channel/<ch>` endpoint
+- Small ✕ remove button on each chip — unpins without needing to go back
+  to the Channels tab
+- Empty state message shown in the bar when no favorites are set yet,
+  pointing the user to the Channels tab
+- Cap enforcement — attempting to add an 11th favorite logs a message to
+  the activity log instead of silently failing or evicting an existing one
+
+#### Design notes
+- Star state stays in sync across all three table views (bank, search,
+  lockouts) — toggling a favorite from any one of them immediately
+  updates the star icon if the same channel happens to be visible
+  elsewhere, and always updates the Dashboard bar live
+- `Favorites.renderStars()` is called whenever the Channels tab is opened
+  so star icons always reflect current state even after navigating away
+  and back
+- Yellow/gold colour (`#fbbf24`) used consistently for the star icon and
+  chip hover state — distinct from every other accent colour already in
+  use (green, blue, amber, red) so favorites are visually unambiguous
+
+### Changed
+- `templates/base.html` — `favorites.js` added to script load order
+  (position 6, before `status.js` and `main.js`)
+- `templates/index.html` — favorites bar markup added inside the display
+  panel; star column header (`<th></th>`) added to the channel table
+- `static/js/channels.js` — star button added to all three row-rendering
+  functions (`renderChannels`, search results render, Lockouts render);
+  all `colspan="9"` placeholder rows updated to `colspan="10"` to account
+  for the new column
+- `static/js/main.js` — `Favorites.init()` added to `DOMContentLoaded`
+- `static/js/tabs.js` — `Favorites.renderStars()` called when the
+  Channels tab opens
+- `static/css/style.css` — `.ch-star-btn`, `.fav-bar`, `.fav-chip`,
+  `.fav-chip-ch`, `.fav-chip-name`, `.fav-chip-freq`, `.fav-chip-remove`
+  styles added with mobile responsive sizing
+
+---
+
+## [0.7.14] — Smart Resume Sensitivity Live Readout
+
+### Added
+- Live readout label next to the Smart Resume Sensitivity slider —
+  confirms the slider was already updating the underlying threshold on
+  every move (it was), but added visual feedback since there was
+  previously no indication of the current setting
+- Five descriptive tiers based on slider position: **Very Aggressive**,
+  **Aggressive**, **Balanced**, **Conservative**, **Very Conservative**
+- Readout shows the *actual* threshold values being used, not just a
+  label — e.g. `Balanced · ZCR 0.33 · Silence 6%+` — so it's transparent
+  exactly what the slider controls under the hood
+- Colour-coded readout pill: red tint for aggressive settings, amber for
+  balanced, green for conservative — matches the colour language used
+  elsewhere in the app (red=skip more, green=stay more)
+- Readout updates immediately on every slider drag (the `input` event,
+  not just on release) and also initialises correctly from the saved
+  `localStorage` preference when the page first loads
+
+### Changed
+- `templates/index.html` — `sr-sens-readout` span added above the
+  sensitivity slider; slider row restructured to a two-row layout
+  (label + readout on top, slider with end labels below)
+- `static/js/smartresume.js` — `getSensReadout()` element getter added;
+  `updateSensReadout()` function added, computing the same ZCR and
+  silence-ratio formulas used by `analyseFrame()` so the displayed
+  numbers always match actual behaviour; called on both slider `init()`
+  and every `input` event
+- `static/css/style.css` — `.sr-sens-readout` pill style with three
+  colour-coded state classes added; `.sr-row` flex layout added
+
+### Note
+The sensitivity slider was already functioning correctly — every drag
+updated the `sensitivity` variable and persisted it to `localStorage`
+immediately. This update adds the missing visual confirmation so it's
+clear at a glance where the slider sits and what it's actually doing.
+
+---
+
+## [0.7.13] — Status Page Bug Fix: Missing config Import
+
+### Fixed
+
+#### Scanner info fields blank on Status page (Connection, Model, Firmware, Port, Battery)
+
+**Root cause:** `get_full_status()` in `api/routes.py` referenced `config.RECORDINGS_DIR`,
+`config.SCANNER_PORT`, `config.SCANNER_BAUD`, and `config.SCANNER_POLL_INTERVAL`
+but the `config` module was never imported anywhere in `routes.py` — only
+`current_app`, `request`, `jsonify`, and `Blueprint` were imported at the top
+of the file. Every call to `/api/status/full` raised a `NameError` and
+returned a `success: false` error envelope.
+
+**Why Uptime still displayed a value:** `static/js/status.js` started an
+independent `setInterval` ticker using `Date.now()` at page load time,
+completely decoupled from whether the server request succeeded. It looked
+like live data but was actually just counting time since the browser tab
+opened, not the scanner's real connection time.
+
+**Fix:**
+- `api/routes.py` — added `from config import config as cfg` inside
+  `get_full_status()`; all four `config.X` references updated to `cfg.X`
+- `static/js/status.js` — `startUptimeTicker()` is no longer called
+  unconditionally in `init()`. It now starts only inside
+  `loadServerStatus()`, and only when `scanner.connected` is true and
+  `uptime_seconds` was successfully returned from the server — using the
+  real `connected_at` timestamp rather than browser page-load time
+- When the scanner is disconnected, uptime now correctly shows `—` instead
+  of a misleading running clock
+
+### Changed
+- `api/routes.py` — `get_full_status()` config import fixed
+- `static/js/status.js` — `init()` simplified; uptime ticker logic moved
+  inside `loadServerStatus()`'s success path
+
+---
+
+## [0.7.12] — Scanner Status Page
+
+### Added
+- **Status tab** — sixth tab in the nav bar, dedicated dashboard for
+  scanner health and listening statistics
+- `GET /api/status/full` — combined server-side status endpoint:
+  connection state, model, firmware, port/baud, uptime (calculated from
+  `connected_at` timestamp), battery voltage, and recordings folder stats
+  (file count, total size, estimated total duration from WAV byte size)
+- `scanner/scanner.py` — `connected_at` ISO timestamp now stored in state
+  on every successful `connect()`, used to calculate live uptime
+
+#### Status page sections
+- **Scanner card grid** — connection status, uptime (live ticking), model,
+  firmware, port/baud, battery voltage
+- **This Session** — transmissions heard, transmissions skipped by Smart
+  Resume, average transmission duration, transmissions per hour — computed
+  client-side from Activity History entries logged since the page loaded
+- **All Time** — same metrics computed across every entry ever logged in
+  History (persists via the same `localStorage` data History already uses),
+  plus a "Tracking Since" date showing the oldest logged entry
+- **Busiest Channels** — top 8 most-active frequencies as a horizontal bar
+  chart, sorted by transmission count, with channel name and occurrence
+  count per row
+- **Recordings** — total files, total estimated duration, disk space used
+
+#### Design notes
+- Session vs all-time stats both shown side by side rather than choosing
+  one — session stats answer "what's happening right now", all-time stats
+  answer "what's the bigger picture"
+- All transmission statistics are computed from the same `bc125at_history`
+  localStorage data already populated by the History tab — no duplicate
+  tracking, no backend stats database needed
+- Recording duration is estimated from WAV file size using the known
+  encoding format (44100Hz, 16-bit, mono = 88200 bytes/sec) rather than
+  parsing each file's header, keeping the endpoint fast even with many
+  recordings
+- Uptime ticks live client-side once the initial server uptime is fetched,
+  rather than re-polling the server every second
+
+### Changed
+- `templates/base.html` — Status tab button and pane added; `status.js`
+  added to script load order (position 6, before `main.js` — same pattern
+  established by the History/SmartResume load-order fixes in earlier
+  versions)
+- `templates/index.html` — Status tab content block added with scanner
+  info grid, session/all-time stat cards, busiest channels chart, and
+  recordings summary
+- `static/js/main.js` — `Status.init()` added to `DOMContentLoaded`
+- `static/js/tabs.js` — `Status.render()` called when Status tab opens
+- `api/routes.py` — `get_full_status()` endpoint added
+- `static/css/style.css` — `.status-page`, `.status-grid`, `.status-card`,
+  `.busiest-row`, `.busiest-bar` styles added with responsive breakpoints
+
+---
+
+## [0.7.11] — Lockout Manager
+
+### Added
+- **🔒 Lockouts toggle** in the Channels tab search bar — filters the
+  channel table to show only locked-out channels across all 500, regardless
+  of which bank is currently loaded
+- Live count badge on the toggle button showing how many channels are
+  currently locked out, updating as background bank loading completes
+- Each locked-out row shows a bank badge (B1–B10) so you know exactly
+  where the channel lives
+- **Unlock** button per row — clears the lockout for that single channel
+  instantly via the existing `PUT /api/channel/<ch>` endpoint
+- **Unlock All** button — appears when Lockouts view is active; unlocks
+  every locked-out channel in one operation with a confirmation dialog
+- New `POST /api/channels/bulk-unlock` endpoint — reads each channel's
+  current data first (preserving name, frequency, modulation, etc.), then
+  writes all of them back with `locked_out=false` in a single program mode
+  session via `set_channels_bulk()`
+
+#### How it works
+- `Lockouts` module reuses the `ChSearch` background-loaded channel cache
+  (`allChannels[]`) introduced for channel search — no separate data fetch
+  required
+- `ChSearch` public API extended with `getAllChannels()`,
+  `updateChannelInCache()`, and a `fullyLoaded` getter so other modules can
+  read and update the shared cache safely
+- Activating Lockouts view clears any active search and deselects the bank
+  buttons; deactivating restores the previously loaded bank view
+- Edit button on each locked row opens the same edit modal used everywhere
+  else in the channel manager
+
+### Changed
+- `templates/index.html` — `🔒 Lockouts` toggle button with count badge
+  added next to the search input
+- `static/js/channels.js` — `Lockouts` module added (toggle, render,
+  unlock, unlock all); `ChSearch` return object extended with three new
+  accessors; `Lockouts.updateCount()` hooked into `loadBank()`
+- `api/routes.py` — `bulk_unlock_channels()` endpoint added
+- `static/css/style.css` — `.ch-lockout-toggle`, `.ch-lockout-count`,
+  `.ch-action-btn.unlock` styles added; mobile wrap behaviour added for
+  the search bar row
+
+---
+
+## [0.7.10] — Smart Resume VAD Rewrite: Frequency-Triggered + Zero Crossing Rate
+
+### Fixed
+
+#### Smart Resume never triggered — same root cause as History
+Smart Resume's `onState()` waited for `squelch_open` to flip true before
+starting audio analysis, exactly like the History bug in v0.7.9.
+`squelch_open` rarely becomes true during normal scanning, so
+`startListening()` was almost never called and no VAD analysis ran at all.
+
+**Fix:** Smart Resume now triggers the same way as History — when the
+scanner's frequency stays stable for `SR_DWELL_MS` (800ms), VAD analysis
+begins automatically. Works regardless of `squelch_open` state, squelch
+level, or whether in scan or search mode.
+
+#### VAD misclassified CB static/noise as voice
+The original algorithm measured spectral variance (standard deviation of
+energy across the voice frequency band). CB radio static turned out to have
+an uneven spectral profile too — `stdDev` values of 20–25 were common for
+both real voice AND modulated static, so the test could not tell them apart.
+
+**Fix — switched to time-domain analysis:**
+- **Zero Crossing Rate (ZCR)** — counts how often the raw audio waveform
+  crosses zero. Random static crosses very frequently (ZCR > 0.35); voice
+  crosses at a moderate, structured rate (ZCR 0.05–0.25); a dead carrier
+  barely crosses at all (ZCR < 0.05)
+- **Silence ratio** — tracks what fraction of analysed frames are
+  near-silent. Voice naturally has pauses between words and breaths
+  (silence ratio typically 10–60%); continuous static almost never goes
+  quiet (silence ratio near 0%)
+- **Decision rule:** classified as noise only when BOTH high ZCR AND no
+  silence pauses are present — requiring two independent signals to agree
+  before skipping, reducing false positives on real transmissions
+
+### Changed
+- `static/js/smartresume.js`:
+  - `onState()` rewritten — frequency-stability dwell timer (`SR_DWELL_MS`,
+    800ms) replaces the `squelch_open` rising-edge trigger; cancels and
+    resets cleanly when the scanner moves to a new frequency
+  - `analyseFrame()` rewritten — now reads `getByteTimeDomainData()`
+    alongside `getByteFrequencyData()`; computes ZCR and silence ratio per
+    frame; old spectral-variance-only test removed
+  - `analyser.smoothingTimeConstant` reduced from 0.3 to 0.1 for sharper
+    time-domain resolution
+  - `srDwellFreq` reset to `null` immediately after a skip decision so the
+    next frequency starts tracking right away
+  - Per-frame console logging added: `[VAD] zcr=… silence=…% ampVar=… → DECISION`
+  - Dwell-trigger console logging added: `[SmartResume] Dwell detected on X MHz`
+
+### Notes
+- Both fixes mirror the History tab fix in v0.7.9 — frequency stability is
+  now the standard trigger pattern used across the app instead of relying
+  on `squelch_open`, which the BC125AT only sets when audio physically
+  breaks the squelch threshold (not simply when the scanner stops scanning)
+- Threshold tuning is ongoing — console logging is left in place
+  intentionally so real-world ZCR/silence values can be collected and used
+  to refine `zcrNoiseThreshold` and `silenceVoiceMin` in a future update
+
+---
+
+## [0.7.9] — Activity History Bug Fix: Script Load Order & State Tracking
+
+### Fixed
+
+#### History tab not recording any transmissions
+
+**Root cause 1 — Script load order:** `history.js` was loading at position 9,
+after `main.js` at position 5. When `main.js` executed `History.init()` inside
+`DOMContentLoaded`, `window.History` was `undefined` — the module had not
+loaded yet. The same root cause affected the notification button in v0.6.2.
+
+**Fix:** `history.js` moved to load at position 5, before `main.js`.
+
+**Root cause 2 — Fragile `applyStatus` chain:** Both `history.js` and
+`smartresume.js` were patching `window.applyStatus` inside their `init()`
+functions to intercept scanner state. This created a fragile chain of nested
+function wrappers that could silently break if any module patched before
+another. If `applyStatus` wasn't defined when the patch ran, the condition
+`typeof window.applyStatus === 'function'` would fail silently.
+
+**Fix:** Both modules now receive scanner state via a **direct hook in
+`socket.js`** on the `scanner_state` SocketIO event — the most reliable
+point in the data flow. The fragile `applyStatus` patches removed from
+both `history.js` and `smartresume.js`.
+
+```js
+// socket.js — single authoritative hook point
+socket.on('scanner_state', (state) => {
+  applyStatus(state);
+  if (window.History)     History.onState(state);
+  if (window.SmartResume) SmartResume.onState(state);
+});
+```
+
+### Changed
+- `templates/base.html` — `history.js` moved from position 9 to position 5
+  (before `main.js`); removed from after `channels.js`
+- `static/js/socket.js` — `History.onState(state)` and
+  `SmartResume.onState(state)` called directly in `scanner_state` handler
+- `static/js/history.js` — fragile `applyStatus` patch removed from
+  `init()`; replaced with comment referencing `socket.js` hook
+- `static/js/smartresume.js` — same fragile patch removed
+
+---
+
+## [0.7.8] — Activity History
+
+### Added
+- `static/js/history.js` — persistent transmission history module
+- **History tab** — new fourth tab alongside Dashboard · Channels · Settings
+- Tab badge showing total logged transmission count (updates live)
+
+#### What gets logged
+Every time squelch opens and closes, an entry is recorded:
+- Timestamp (date + time)
+- Frequency (MHz)
+- Channel number
+- Channel name
+- Modulation
+- Duration (seconds squelch was open)
+- Status: **Heard** (green) or **Skipped** (grey, set by Smart Resume)
+
+Transmissions shorter than 0.3 seconds are not logged (filters out
+scanner blips during rapid scan between channels).
+
+#### History tab features
+- **Filter box** — real-time filter across all entries by name, frequency,
+  channel number, or modulation
+- **Pagination** — 50 entries per page with Prev / Next buttons
+- **Entry count** — shows total matching entries and current page
+- **↓ Export** — downloads all visible entries as a dated CSV file
+  (`bc125at_history_YYYY-MM-DD.csv`)
+- **Clear** — confirmation dialog before wiping all entries
+- Skipped rows are visually dimmed with a grey "Skipped" badge
+- Heard rows show a green "Heard" badge
+
+#### Smart Resume integration
+When Smart Resume decides a transmission is noise and resumes scanning,
+it calls `History.markLastSkipped()` to update the most recent entry's
+status from "Heard" to "Skipped" — so you can see exactly which
+transmissions were auto-skipped.
+
+#### Storage
+- `localStorage` key `bc125at_history`
+- Maximum 500 entries — oldest pruned automatically
+- Persists across page reloads and browser sessions
+- If localStorage is full, pruned to 100 entries and retried
+
+### Changed
+- `templates/base.html` — History tab button added to nav (with badge
+  span); History tab pane added; `history.js` added to script load order
+  (position 10, after `channels.js`)
+- `templates/index.html` — History tab block added with toolbar
+  (filter, pagination, export, clear) and transmission table
+- `static/js/main.js` — `History.init()` added to `DOMContentLoaded`
+- `static/js/tabs.js` — `History.render()` called when History tab opens
+- `static/js/smartresume.js` — calls `History.markLastSkipped()` before
+  sending the scan key when noise is detected
+- `static/css/style.css` — `.hist-tab-badge`, `.hist-manager`,
+  `.hist-toolbar`, `.hist-table`, `.hist-badge`, `.hist-badge--heard`,
+  `.hist-badge--skip`, `.hist-skipped`, `.hist-timestr` styles added;
+  mobile responsive override added
+
+---
+
+## [0.7.7] — Smart Resume (Voice Activity Detection)
+
+### Added
+- `static/js/smartresume.js` — Voice Activity Detection engine using the
+  Web Audio API. Analyses incoming audio from the line-in port when squelch
+  opens and automatically resumes scanning if no voice is detected.
+
+#### How it works
+1. Scanner state push fires `squelch_open: true` (rising edge)
+2. Smart Resume starts capturing audio from the system default audio input
+   (the same line-in connection used for recording)
+3. Web Audio API FFT analyser samples audio every 100ms for 2.5 seconds
+4. Each frame is scored on two criteria:
+   - **Energy level**: RMS energy below noise floor → dead carrier/silence
+   - **Voice ratio**: energy in 300–3400 Hz voice band vs total broadband
+     energy. Voice concentrates energy in this range; noise/static is flat
+5. After 2.5 seconds a majority vote is taken across all frames:
+   - Voice detected → stay on channel, log "voice detected"
+   - Noise/static/carrier detected → send `KEY,S,P` to resume scanning
+6. Squelch closes before decision → analysis cancelled, no action
+
+#### VAD algorithm details
+- FFT size: 2048 bins at 44100 Hz = ~21.5 Hz per bin
+- Voice band: bins 14–158 (approx 300–3400 Hz)
+- Voice ratio threshold: 0.45–0.70 (adjusted by sensitivity slider)
+- Noise floor: avg energy < 8/255 → classified as silent carrier
+- Decision: majority vote across all 100ms analysis frames in the window
+
+#### UI — Dashboard (Recording column)
+- **Smart Resume** panel with ON/OFF toggle button
+- **Sensitivity slider**: Aggressive (left) ↔ Conservative (right)
+  - Aggressive: quicker to skip, may skip marginal voice
+  - Conservative: gives more benefit of the doubt, may stay on some noise
+- **Status line**: Ready → Listening… → Voice / Noise — resuming
+- **Live indicator**: 🎙 Voice / 〰 Noise / — Silent during analysis
+- Preference (enabled state + sensitivity) saved to `localStorage`
+
+#### Requirements
+- Browser microphone/line-in permission (prompt shown on first enable)
+- Scanner audio output physically connected to computer line-in/mic port
+
+### Changed
+- `templates/base.html` — `smartresume.js` added to script load order
+  (position 4, after `notifications.js`, before `main.js`)
+- `templates/index.html` — Smart Resume panel added to the Recording column
+  in the levels panel (above Activity log)
+- `static/js/main.js` — `SmartResume.init()` added to `DOMContentLoaded`
+- `static/css/style.css` — `.sr-toggle`, `.sr-body`, `.sr-sens-wrap`,
+  `.sr-feedback`, `.sr-status-text`, `.sr-indicator` styles added with
+  state variants (listening/amber, voice/green, skip/blue, err/red)
+
+### Design decisions
+- 2.5 second window chosen as conservative default — gives enough time to
+  distinguish voice from momentary noise bursts
+- Majority vote (>50% of frames) rather than requiring all frames to agree —
+  handles the real-world case where voice starts mid-window
+- Falling edge cancellation — if squelch closes before the 2.5s window,
+  analysis stops immediately and no scan key is sent
+- Sensitivity slider maps linearly to voice ratio threshold (0.45–0.70)
+  letting users tune for their specific noise environment
+
+---
+
+## [0.7.6] — Channel Search & Filter
+
+### Added
+- Live search bar in the Channels tab — filters all 500 channels by name,
+  frequency, or modulation as you type
+- Background loader: when the Channels tab first opens, bank 1 loads
+  immediately (normal flow), then banks 2–10 load silently in the background
+  so search covers all 500 channels without a blocking wait
+- Search results show a **B1–B10 bank badge** on each row so you know
+  exactly where each channel lives without having to know the bank
+- **Highlighted matches** — the matching portion of each channel name,
+  frequency, and modulation is highlighted in green in the results table
+- Debounced input (200ms) — search only fires when you pause typing,
+  keeping the UI smooth even on slow hardware
+- Partial results indicator — if you search before background loading
+  completes, a status message shows how many channels have been searched
+  so far and updates as more banks finish loading
+- Clear button (✕) appears in the search box when there is text; clears
+  and returns to normal bank view instantly
+- `Escape` key clears the search input and returns to bank view
+- Status line shows loading progress (`amber`), ready state (`green`),
+  and result count — fades out after 3 seconds when idle
+
+### Changed
+- `templates/index.html` — search bar added between toolbar and table;
+  contains search input, clear button, and status label
+- `static/js/channels.js` — `ChSearch` module prepended (260 lines):
+  `loadAllBanks()`, `mergeBank()`, `runSearch()`, `highlight()`, `init()`;
+  `loadBank()` now calls `ChSearch.mergeBank()` and triggers
+  `ChSearch.loadAllBanks()` after each successful bank fetch; bank button
+  click clears search input; `DOMContentLoaded` initialises ChSearch
+- `static/js/tabs.js` — `ChSearch.init()` called when Channels tab
+  first opens
+- `static/css/style.css` — `.ch-search-bar`, `.ch-search-input-wrap`,
+  `.ch-search-input`, `.ch-search-clear`, `.ch-search-status`, `.ch-match`,
+  `.ch-bank-badge`, `.ch-search-empty` styles added; mobile responsive
+  override added
+
+### How it works
+1. Open the Channels tab → bank 1 loads and renders immediately
+2. Background loader silently fetches banks 2–10 one at a time, merging
+   each into the shared `allChannels[]` cache
+3. Type anything in the search box → results filter instantly from whatever
+   is cached, with a note if loading is still in progress
+4. Results show channel number + bank badge, with matching text highlighted
+5. Click a bank button or press Esc → search clears, bank view restored
+6. Jump and Edit buttons work the same as in normal bank view
+
+---
+
 ## [0.7.5] — KEY Command Protocol Fix
 
 ### Fixed

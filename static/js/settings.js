@@ -2,6 +2,9 @@
 
 /* ── Load all settings from server ── */
 async function loadSettings() {
+  // Load custom search ranges alongside main settings
+  if (window.loadSearchRanges) loadSearchRanges();
+
   const res = await apiFetch('/api/settings');
   if (!res.success) return;
 
@@ -130,3 +133,160 @@ document.querySelectorAll('.pri-btn').forEach(btn => {
 
 /* Expose for tabs.js */
 window.loadSettings = loadSettings;
+
+
+/* ════════════════════════════════════════════════════
+   Custom Search Ranges
+   ════════════════════════════════════════════════════ */
+
+let searchRangesCache = [];
+
+async function loadSearchRanges() {
+  const list = document.getElementById('search-ranges-list');
+  if (!list) return;
+
+  list.innerHTML = '<span class="log-empty">Loading search ranges…</span>';
+
+  const res = await apiFetch('/api/search/ranges');
+  if (!res.success) {
+    list.innerHTML = `<span class="log-empty">Failed to load — ${res.message}</span>`;
+    return;
+  }
+
+  searchRangesCache = res.data.ranges;
+  renderSearchRanges();
+
+  // Also load search settings (delay + CTCSS/DCS search)
+  const settingsRes = await apiFetch('/api/search/settings');
+  if (settingsRes.success) {
+    const delayEl = document.getElementById('search-delay');
+    const codeEl  = document.getElementById('search-code-search');
+    if (delayEl) delayEl.value = settingsRes.data.delay || '2';
+    if (codeEl)  codeEl.checked = !!settingsRes.data.code_search;
+  }
+}
+
+function renderSearchRanges() {
+  const list = document.getElementById('search-ranges-list');
+  if (!list) return;
+
+  list.innerHTML = searchRangesCache.map(r => `
+    <div class="search-range-row" data-index="${r.index}">
+      <label class="sr-range-toggle">
+        <input type="checkbox" class="sr-range-enabled" data-index="${r.index}" ${r.enabled ? 'checked' : ''}>
+        <span class="sr-range-num">${r.index}</span>
+      </label>
+      <input type="number" class="modal-input sr-range-lower" data-index="${r.index}"
+             value="${r.lower_mhz || ''}" step="0.0025" min="25" max="512" placeholder="Lower MHz">
+      <span class="sr-range-dash">–</span>
+      <input type="number" class="modal-input sr-range-upper" data-index="${r.index}"
+             value="${r.upper_mhz || ''}" step="0.0025" min="25" max="512" placeholder="Upper MHz">
+      <button class="key key--nav sr-range-save" data-index="${r.index}">Save</button>
+    </div>
+  `).join('');
+
+  // Wire individual range save buttons
+  list.querySelectorAll('.sr-range-save').forEach(btn => {
+    btn.addEventListener('click', () => saveSearchRange(parseInt(btn.dataset.index)));
+  });
+
+  // Wire enabled toggles — collected and applied together via Apply button below,
+  // but we also support instant single toggle for simplicity
+  list.querySelectorAll('.sr-range-enabled').forEach(cb => {
+    cb.addEventListener('change', () => applySearchRangeToggles());
+  });
+}
+
+async function saveSearchRange(index) {
+  const row = document.querySelector(`.search-range-row[data-index="${index}"]`);
+  if (!row) return;
+
+  const lowerEl = row.querySelector('.sr-range-lower');
+  const upperEl = row.querySelector('.sr-range-upper');
+  const btn     = row.querySelector('.sr-range-save');
+
+  const lower_mhz = parseFloat(lowerEl.value);
+  const upper_mhz = parseFloat(upperEl.value);
+
+  if (isNaN(lower_mhz) || isNaN(upper_mhz)) {
+    if (window.logEntry) logEntry('Both lower and upper frequencies are required', 'err');
+    return;
+  }
+  if (lower_mhz >= upper_mhz) {
+    if (window.logEntry) logEntry('Lower frequency must be less than upper', 'err');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const res = await apiFetch(`/api/search/ranges/${index}`, 'PUT', { lower_mhz, upper_mhz });
+
+  btn.disabled = false;
+  btn.textContent = 'Save';
+
+  if (window.logEntry) {
+    logEntry(
+      res.success ? `Search range ${index} saved: ${lower_mhz}–${upper_mhz} MHz` : `Save failed — ${res.message}`,
+      res.success ? 'ok' : 'err'
+    );
+  }
+
+  if (res.success) {
+    const cached = searchRangesCache.find(r => r.index === index);
+    if (cached) { cached.lower_mhz = lower_mhz; cached.upper_mhz = upper_mhz; }
+  }
+}
+
+async function applySearchRangeToggles() {
+  const checkboxes = document.querySelectorAll('.sr-range-enabled');
+  const groups = Array.from({ length: 10 }, (_, i) => {
+    const cb = document.querySelector(`.sr-range-enabled[data-index="${i + 1}"]`);
+    return cb ? cb.checked : true;
+  });
+
+  if (!groups.some(g => g)) {
+    if (window.logEntry) logEntry('At least one search range must stay enabled', 'err');
+    // Revert the checkbox that was just unchecked
+    loadSearchRanges();
+    return;
+  }
+
+  const res = await apiFetch('/api/search/groups', 'POST', { groups });
+  if (window.logEntry) {
+    logEntry(
+      res.success ? 'Search ranges updated' : `Failed — ${res.message}`,
+      res.success ? 'ok' : 'err'
+    );
+  }
+}
+
+/* Search settings (delay + CTCSS/DCS search) */
+const searchSettingsSaveBtn = document.getElementById('search-settings-save');
+if (searchSettingsSaveBtn) {
+  searchSettingsSaveBtn.addEventListener('click', async () => {
+    const delay = document.getElementById('search-delay')?.value || '2';
+    const codeSearch = document.getElementById('search-code-search')?.checked || false;
+
+    searchSettingsSaveBtn.disabled = true;
+    searchSettingsSaveBtn.textContent = 'Saving…';
+
+    const res = await apiFetch('/api/search/settings', 'POST', { delay, code_search: codeSearch });
+
+    searchSettingsSaveBtn.disabled = false;
+    searchSettingsSaveBtn.textContent = 'Save';
+
+    if (window.logEntry) {
+      logEntry(
+        res.success ? 'Search settings saved' : `Failed — ${res.message}`,
+        res.success ? 'ok' : 'err'
+      );
+    }
+  });
+}
+
+/* Refresh button */
+document.getElementById('search-ranges-refresh')?.addEventListener('click', loadSearchRanges);
+
+/* Expose for settings tab init */
+window.loadSearchRanges = loadSearchRanges;

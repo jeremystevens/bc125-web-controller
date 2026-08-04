@@ -30,6 +30,7 @@ import logging
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request
+from auth import admin_required
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +228,7 @@ def get_channel(ch: int):
 
 
 @scanner_bp.post("/channel/<int:ch>")
+@admin_required
 @scanner_required
 def jump_to_channel(ch: int):
     """POST /api/channel/<ch> — Jump to channel 1-500."""
@@ -451,6 +453,7 @@ def _build_bc125at_ss(channels: list[dict]) -> str:
 
 
 @scanner_bp.get("/channels/export/ss")
+@admin_required
 @scanner_required
 def export_channels_ss():
     """
@@ -475,6 +478,7 @@ def export_channels_ss():
 
 
 @scanner_bp.post("/channels/import/ss")
+@admin_required
 @scanner_required
 def import_channels_ss():
     """
@@ -570,6 +574,7 @@ def recording_status():
 
 
 @scanner_bp.post("/recording/start")
+@admin_required
 def recording_start():
     """
     POST /api/recording/start — begin recording from default audio input.
@@ -587,6 +592,7 @@ def recording_start():
 
 
 @scanner_bp.post("/recording/stop")
+@admin_required
 def recording_stop():
     """POST /api/recording/stop — stop recording (tail runs before save)."""
     result = current_app.recorder.stop()
@@ -639,6 +645,7 @@ def get_channels():
 
 
 @scanner_bp.put("/channel/<int:ch>")
+@admin_required
 @scanner_required
 def update_channel(ch: int):
     """
@@ -707,6 +714,7 @@ def get_settings():
 
 
 @scanner_bp.post("/settings/groups")
+@admin_required
 @scanner_required
 def settings_set_groups():
     """POST /api/settings/groups — Set all 10 scan group states."""
@@ -723,6 +731,7 @@ def settings_set_groups():
 
 
 @scanner_bp.post("/settings/priority")
+@admin_required
 @scanner_required
 def settings_set_priority():
     """POST /api/settings/priority — Set priority mode. Body: { mode: '0'|'1'|'2'|'3' }"""
@@ -737,6 +746,7 @@ def settings_set_priority():
 
 
 @scanner_bp.post("/settings/serial")
+@admin_required
 def settings_set_serial():
     """
     POST /api/settings/serial — Update serial settings in .env file.
@@ -793,6 +803,7 @@ def settings_set_serial():
 # ---------------------------------------------------------------------------
 
 @scanner_bp.get("/channels/export")
+@admin_required
 @scanner_required
 def export_channels():
     """
@@ -838,6 +849,7 @@ def export_channels():
 
 
 @scanner_bp.post("/channels/import")
+@admin_required
 @scanner_required
 def import_channels():
     """
@@ -934,3 +946,309 @@ def import_channels():
         },
         message=f"Import complete — {written} channels written, {skipped + len(pre_errors)} skipped.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Lockout Manager  (bulk unlock)
+# ---------------------------------------------------------------------------
+
+@scanner_bp.post("/channels/bulk-unlock")
+@admin_required
+@scanner_required
+def bulk_unlock_channels():
+    """
+    POST /api/channels/bulk-unlock
+    Body: { channels: [1, 5, 12, ...] }
+    Unlocks the given channel numbers in a single program mode session.
+    Reads each channel's current data first (to preserve name/freq/etc.),
+    then writes back with locked_out=False.
+    """
+    body = request.get_json(silent=True)
+    if not body or "channels" not in body:
+        return error("Body must be JSON with 'channels' key (list of channel numbers).")
+
+    channel_nums = body["channels"]
+    if not isinstance(channel_nums, list) or not channel_nums:
+        return error("'channels' must be a non-empty list of channel numbers.")
+
+    scanner = get_scanner()
+
+    # Read current data for each channel, then build the unlock payload
+    to_write = []
+    for ch_num in channel_nums:
+        try:
+            ch_num = int(ch_num)
+        except (ValueError, TypeError):
+            continue
+        if not 1 <= ch_num <= 500:
+            continue
+
+        info = scanner.get_channel_info(ch_num)
+        if info:
+            to_write.append({
+                "channel":    ch_num,
+                "name":       info.get("name", ""),
+                "freq_hz":    info.get("frequency_hz", 0),
+                "modulation": info.get("modulation", "FM"),
+                "ctcss_dcs":  info.get("ctcss_dcs", "0"),
+                "delay":      info.get("delay", "2"),
+                "locked_out": False,
+                "priority":   info.get("priority", False),
+            })
+
+    if not to_write:
+        return error("No valid channels to unlock.")
+
+    written, skipped, errors = scanner.set_channels_bulk(to_write)
+
+    return success(
+        {
+            "written": written,
+            "skipped": skipped,
+            "errors":  errors[:20],
+        },
+        message=f"Unlocked {written} channel(s)" + (f", {skipped} failed" if skipped else ""),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scanner Status Page
+# ---------------------------------------------------------------------------
+
+@scanner_bp.get("/status/full")
+def get_full_status():
+    """
+    GET /api/status/full
+    Combined status snapshot for the Status page:
+      - Scanner connection info + uptime
+      - Recordings folder stats (count, total size, total duration estimate)
+    Session-level transmission stats are computed client-side from
+    Activity History (localStorage) — this endpoint only provides
+    server-side facts that the browser cannot know on its own.
+    """
+    from pathlib import Path
+    from datetime import datetime
+    from config import config as cfg
+
+    scanner = get_scanner()
+    state   = scanner.state
+
+    # Uptime calculation
+    uptime_seconds = None
+    if state.get("connected_at"):
+        try:
+            connected_at = datetime.fromisoformat(state["connected_at"])
+            uptime_seconds = (datetime.now() - connected_at).total_seconds()
+        except (ValueError, TypeError):
+            pass
+
+    # Recordings folder stats
+    rec_dir = Path(cfg.RECORDINGS_DIR)
+    rec_count = 0
+    rec_total_bytes = 0
+    if rec_dir.exists():
+        for f in rec_dir.glob("*.wav"):
+            rec_count += 1
+            rec_total_bytes += f.stat().st_size
+
+    # Estimate total recording duration from file size
+    # WAV format: 44100Hz, 16-bit, mono = 88200 bytes/sec (+ ~44 byte header, negligible)
+    BYTES_PER_SECOND = 44100 * 2  # sample_rate * bytes_per_sample (mono)
+    rec_total_seconds = rec_total_bytes / BYTES_PER_SECOND if rec_total_bytes else 0
+
+    return success({
+        "scanner": {
+            "connected":      scanner.is_connected,
+            "model":          state.get("model", ""),
+            "firmware":       state.get("firmware", ""),
+            "port":           cfg.SCANNER_PORT,
+            "baud":           cfg.SCANNER_BAUD,
+            "poll_interval":  cfg.SCANNER_POLL_INTERVAL,
+            "connected_at":   state.get("connected_at"),
+            "uptime_seconds": uptime_seconds,
+            "battery_volts":  state.get("battery_volts", 0.0),
+        },
+        "recordings": {
+            "count":          rec_count,
+            "total_bytes":    rec_total_bytes,
+            "total_mb":       round(rec_total_bytes / (1024 * 1024), 2),
+            "total_seconds":  round(rec_total_seconds, 1),
+        },
+    })
+
+
+# ---------------------------------------------------------------------------
+# Custom Search Ranges
+# ---------------------------------------------------------------------------
+
+@scanner_bp.get("/search/ranges")
+@scanner_required
+def get_search_ranges():
+    """
+    GET /api/search/ranges
+    Returns all 10 custom search ranges with their enabled state and
+    lower/upper frequency limits, fetched in a single program mode session.
+    """
+    ranges = get_scanner().get_all_custom_search_ranges()
+    return success({"ranges": ranges})
+
+
+@scanner_bp.put("/search/ranges/<int:index>")
+@admin_required
+@scanner_required
+def update_search_range(index: int):
+    """
+    PUT /api/search/ranges/<index>
+    Body: { lower_mhz: float, upper_mhz: float }
+    index: 1-10
+    """
+    if not 1 <= index <= 10:
+        return error("Search range index out of range.", details="Valid range: 1-10.")
+
+    body = request.get_json(silent=True)
+    if not body:
+        return error("Request body must be JSON.")
+
+    try:
+        lower_mhz = float(body.get("lower_mhz"))
+        upper_mhz = float(body.get("upper_mhz"))
+    except (TypeError, ValueError):
+        return error("lower_mhz and upper_mhz must be numbers.")
+
+    if lower_mhz >= upper_mhz:
+        return error("lower_mhz must be less than upper_mhz.")
+
+    if not (25.0 <= lower_mhz <= 512.0) or not (25.0 <= upper_mhz <= 512.0):
+        return error("Frequencies must be between 25.0000 and 512.0000 MHz.")
+
+    lower_hz = int(round(lower_mhz * 1_000_000))
+    upper_hz = int(round(upper_mhz * 1_000_000))
+
+    ok = get_scanner().set_custom_search_range(index, lower_hz, upper_hz)
+    if not ok:
+        return error(f"Failed to set search range {index}.")
+    return success(message=f"Search range {index} updated: {lower_mhz}–{upper_mhz} MHz.")
+
+
+@scanner_bp.post("/search/groups")
+@admin_required
+@scanner_required
+def set_search_groups():
+    """
+    POST /api/search/groups
+    Body: { groups: [bool, bool, ...] }  (exactly 10 values)
+    Sets which of the 10 custom search ranges are enabled.
+    """
+    body = request.get_json(silent=True)
+    if not body or "groups" not in body:
+        return error("Body must be JSON with 'groups' key.")
+    groups = body["groups"]
+    if not isinstance(groups, list) or len(groups) != 10:
+        return error("'groups' must be a list of exactly 10 booleans.")
+    if not any(groups):
+        return error("At least one search range must remain enabled.")
+
+    ok = get_scanner().set_custom_search_groups([bool(g) for g in groups])
+    if not ok:
+        return error("Failed to update search groups.")
+    return success(message="Search ranges updated.")
+
+
+@scanner_bp.get("/search/settings")
+@scanner_required
+def get_search_settings_route():
+    """GET /api/search/settings — search delay and CTCSS/DCS search toggle."""
+    settings = get_scanner().get_search_settings()
+    if settings is None:
+        return error("Could not read search settings.")
+    return success(settings)
+
+
+@scanner_bp.post("/search/settings")
+@admin_required
+@scanner_required
+def set_search_settings_route():
+    """
+    POST /api/search/settings
+    Body: { delay: str, code_search: bool }
+    """
+    body = request.get_json(silent=True)
+    if not body:
+        return error("Body must be JSON.")
+
+    delay       = str(body.get("delay", "2"))
+    code_search = bool(body.get("code_search", False))
+
+    ok = get_scanner().set_search_settings(delay, code_search)
+    if not ok:
+        return error("Failed to update search settings.")
+    return success(message="Search settings updated.")
+
+
+# ---------------------------------------------------------------------------
+# Session Recording
+# ---------------------------------------------------------------------------
+
+def get_session_recorder():
+    return current_app.session_recorder
+
+
+@scanner_bp.get("/session-recording/status")
+def session_recording_status():
+    """GET /api/session-recording/status"""
+    return success(get_session_recorder().status())
+
+
+@scanner_bp.post("/session-recording/enable")
+@admin_required
+def session_recording_enable():
+    """POST /api/session-recording/enable"""
+    get_session_recorder().enable()
+    return success(message="Session recording enabled.")
+
+
+@scanner_bp.post("/session-recording/disable")
+@admin_required
+def session_recording_disable():
+    """POST /api/session-recording/disable"""
+    get_session_recorder().disable()
+    return success(message="Session recording disabled.")
+
+
+@scanner_bp.get("/recordings/index")
+def recordings_index():
+    """
+    GET /api/recordings/index
+    Returns all recordings with their sidecar metadata if available.
+    """
+    from pathlib import Path
+    from datetime import datetime
+    from config import config as cfg
+
+    rec_dir  = Path(cfg.RECORDINGS_DIR)
+    listings = []
+
+    for wav in sorted(rec_dir.glob("*.wav"), reverse=True):
+        sidecar = wav.with_suffix(".json")
+        meta    = {}
+        if sidecar.exists():
+            try:
+                import json
+                meta = json.loads(sidecar.read_text())
+            except Exception:
+                pass
+
+        stat = wav.stat()
+        listings.append({
+            "filename":      wav.name,
+            "size_kb":       round(stat.st_size / 1024, 1),
+            "created":       datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            "url":           f"/recordings/{wav.name}",
+            "has_meta":      bool(meta),
+            "frequency_mhz": meta.get("frequency_mhz", 0),
+            "channel_name":  meta.get("channel_name", ""),
+            "modulation":    meta.get("modulation", ""),
+            "duration_s":    meta.get("duration_s", 0),
+        })
+
+    return success({"recordings": listings, "count": len(listings)})

@@ -235,6 +235,21 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialise notifications
   if (window.Notifs) window.Notifs.init();
 
+  // Initialise Smart Resume VAD
+  if (window.SmartResume) window.SmartResume.init();
+
+  // Initialise Activity History
+  if (window.History) window.History.init();
+
+  // Initialise Status page
+  if (window.Status) window.Status.init();
+
+  // Render mini heatmap on dashboard
+  if (window.MiniHeatmap) MiniHeatmap.render();
+
+  // Initialise Favorites
+  if (window.Favorites) window.Favorites.init();
+
   // Initialise SocketIO
   if (window.initSocket) {
     window.initSocket();
@@ -393,3 +408,158 @@ $('recordings-refresh').addEventListener('click', loadRecordings);
 
 /* Load recordings on boot */
 loadRecordings();
+
+
+/* ════════════════════════════════════════
+   Session Recording
+   ════════════════════════════════════════ */
+
+let sessionRecEnabled = false;
+
+const sessionRecToggle = document.getElementById('session-rec-toggle');
+const sessionRecStatus = document.getElementById('session-rec-status');
+
+function setSessionRecStatus(text, cls) {
+  if (!sessionRecStatus) return;
+  sessionRecStatus.textContent = text;
+  sessionRecStatus.className   = `session-rec-status ${cls || ''}`;
+}
+
+async function toggleSessionRecording() {
+  const enabling = !sessionRecEnabled;
+  const endpoint = enabling ? '/api/session-recording/enable' : '/api/session-recording/disable';
+
+  const res = await apiFetch(endpoint, 'POST');
+  if (res.success) {
+    sessionRecEnabled = enabling;
+    if (sessionRecToggle) {
+      sessionRecToggle.textContent = enabling ? 'ON' : 'OFF';
+      sessionRecToggle.classList.toggle('active', enabling);
+    }
+    setSessionRecStatus(
+      enabling ? 'Auto-recording transmissions…' : '',
+      enabling ? 'listening' : ''
+    );
+    if (window.logEntry) logEntry(`Auto-Record ${enabling ? 'enabled' : 'disabled'}`, 'info');
+  }
+}
+
+sessionRecToggle?.addEventListener('click', toggleSessionRecording);
+
+// Update session rec indicator from state push
+function applySessionRecState(state) {
+  const srState = state?.session_recorder;
+  if (!srState) return;
+
+  sessionRecEnabled = srState.enabled;
+  if (sessionRecToggle) {
+    sessionRecToggle.textContent = srState.enabled ? 'ON' : 'OFF';
+    sessionRecToggle.classList.toggle('active', srState.enabled);
+  }
+
+  if (srState.recording && srState.current_file) {
+    setSessionRecStatus(`● REC ${srState.elapsed_seconds}s`, 'recording');
+  } else if (srState.enabled) {
+    setSessionRecStatus('Listening…', 'listening');
+  } else {
+    setSessionRecStatus('', '');
+  }
+}
+
+
+/* ════════════════════════════════════════
+   Audio Streaming Player
+   ════════════════════════════════════════ */
+
+const AudioStream = (() => {
+
+  let enabled  = false;
+  let audioEl  = null;
+
+  const getToggle  = () => document.getElementById('audio-stream-toggle');
+  const getPlayer  = () => document.getElementById('audio-stream-player');
+  const getStatus  = () => document.getElementById('audio-stream-status');
+  const getAudio   = () => document.getElementById('audio-stream-el');
+
+  function setStatus(msg, cls) {
+    const el = getStatus();
+    if (el) {
+      el.textContent = msg;
+      el.className   = `audio-stream-status ${cls || ''}`;
+    }
+  }
+
+  function start() {
+    const audio  = getAudio();
+    const player = getPlayer();
+    if (!audio || !player) return;
+
+    player.style.display = 'block';
+    setStatus('Connecting…', 'connecting');
+
+    // Set src to the streaming endpoint with a cache-busting param
+    audio.src = `/stream/audio?t=${Date.now()}`;
+    audio.load();
+
+    audio.oncanplay = () => setStatus('● Live', 'live');
+    audio.onerror   = (e) => {
+      setStatus('Stream error — is line-in connected?', 'error');
+      console.warn('[AudioStream] Error:', e);
+    };
+    audio.onwaiting = () => setStatus('Buffering…', 'connecting');
+    audio.onplaying = () => setStatus('● Live', 'live');
+    audio.onstalled = () => setStatus('Stalled…', 'connecting');
+
+    audio.play().catch(e => {
+      // Autoplay blocked — show message but keep player visible
+      setStatus('Click play to start', '');
+      console.log('[AudioStream] Autoplay blocked:', e.message);
+    });
+
+    enabled = true;
+    if (window.logEntry) logEntry('Live audio streaming started', 'ok');
+  }
+
+  function stop() {
+    const audio  = getAudio();
+    const player = getPlayer();
+
+    if (audio) {
+      audio.pause();
+      audio.src = '';
+      audio.load();
+    }
+
+    if (player) player.style.display = 'none';
+    setStatus('', '');
+    enabled = false;
+    if (window.logEntry) logEntry('Live audio streaming stopped', 'info');
+  }
+
+  function toggle() {
+    const btn = getToggle();
+    if (enabled) {
+      stop();
+      if (btn) { btn.textContent = 'OFF'; btn.classList.remove('active'); }
+    } else {
+      start();
+      if (btn) { btn.textContent = 'ON'; btn.classList.add('active'); }
+    }
+  }
+
+  function init() {
+    getToggle()?.addEventListener('click', toggle);
+  }
+
+  return { init, start, stop, toggle, get enabled() { return enabled; } };
+
+})();
+
+window.AudioStream = AudioStream;
+
+// Init on DOM ready — already inside DOMContentLoaded block
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => AudioStream.init());
+} else {
+  AudioStream.init();
+}

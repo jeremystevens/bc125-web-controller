@@ -14,9 +14,23 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (tab === 'channels' && !window._chLoaded) {
       window._chLoaded = true;
       if (window.loadBank) loadBank(1);
+      // Search init (also called from DOMContentLoaded but safe to call again)
+      if (window.ChSearch) ChSearch.init();
+    }
+    if (tab === 'channels' && window.Favorites) {
+      Favorites.renderStars();
     }
     if (tab === 'settings') {
       if (window.loadSettings) loadSettings();
+    }
+    if (tab === 'history') {
+      if (window.History) {
+        History.render();
+        History.matchRecordings();
+      }
+    }
+    if (tab === 'status') {
+      if (window.Status) Status.render();
     }
   });
 });

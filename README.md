@@ -336,7 +336,7 @@ bc125-controller/
 ```
 ◇  ~~Channel Memory Editor~~          — ✅ shipped in v0.7.0 (CSV export/import)
 ◇  Favorites Manager              — tag and group channels across banks
-◇  Search Range Programming       — configure custom search ranges in-browser
+◇  ~~Search Range Programming~~       — ✅ shipped in v0.7.16
 ◇  Discovery Mode                 — log and display all active frequencies
 ◇  Scanner Audio Streaming        — stream scanner audio to the browser tab
 ◇  Session Recording              — auto-record entire sessions with activity index

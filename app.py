@@ -19,6 +19,8 @@ from flask import Flask, render_template, send_from_directory
 from config import config
 from scanner import Scanner
 from recorder import Recorder
+from recorder.session_recorder import SessionRecorder
+from auth import auth_bp, is_admin, admin_required
 from api import register_api
 from api.socket import socketio
 
@@ -33,6 +35,11 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config["SECRET_KEY"] = config.SECRET_KEY
 
+@app.context_processor
+def inject_auth():
+    """Make is_admin() available in all templates as {{ admin }}."""
+    return {"admin": is_admin()}
+
 # ── SocketIO ───────────────────────────────────────────────────────────────
 socketio.init_app(app)
 
@@ -41,16 +48,44 @@ scanner     = Scanner()
 app.scanner = scanner
 
 # ── Recorder ──────────────────────────────────────────────────────────────
-recorder     = Recorder()
-app.recorder = recorder
+recorder         = Recorder()
+session_recorder = SessionRecorder(recorder)
+app.recorder         = recorder
+app.session_recorder = session_recorder
 
 # ── Register API blueprints + SocketIO events ─────────────────────────────
 register_api(app)
+app.register_blueprint(auth_bp)
 
 # ── Routes ────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/stream/audio")
+def stream_audio():
+    """
+    GET /stream/audio
+    Streams raw PCM audio from the system default input as a
+    continuous chunked WAV response. The browser plays it via
+    <audio src="/stream/audio">.
+
+    Only one sounddevice capture is opened regardless of client count.
+    All clients share the same broadcast queue.
+    """
+    from flask import Response, stream_with_context
+    from api.stream import audio_stream_generator
+
+    return Response(
+        stream_with_context(audio_stream_generator()),
+        mimetype="audio/wav",
+        headers={
+            "Cache-Control":       "no-cache, no-store",
+            "X-Accel-Buffering":   "no",    # disable nginx buffering if proxied
+            "Transfer-Encoding":   "chunked",
+        }
+    )
 
 
 @app.route("/recordings/<path:filename>")
@@ -64,8 +99,11 @@ def serve_recording(filename):
 
 # ── Wire scanner callbacks → SocketIO push ────────────────────────────────
 def on_scanner_state(state: dict) -> None:
-    state["recorder"] = recorder.status()
+    state["recorder"]         = recorder.status()
+    state["session_recorder"] = session_recorder.status()
     socketio.emit("scanner_state", state)
+    # Feed every state push to the session recorder
+    session_recorder.on_state(state)
 
 
 def on_scanner_error(message: str) -> None:

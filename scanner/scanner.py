@@ -21,6 +21,7 @@ Protocol notes:
 import logging
 import threading
 import time
+from datetime import datetime
 from typing import Callable
 
 from . import commands as cmd
@@ -68,6 +69,7 @@ class Scanner:
 
         with self._state_lock:
             self._state["connected"]     = True
+            self._state["connected_at"]  = datetime.now().isoformat()
             self._state["model"]         = model_info.get("model", "Unknown")
             self._state["firmware"]      = fw_info.get("firmware", "Unknown") if fw_info else "Unknown"
             self._state["volume"]        = vol_info.get("volume", 0) if vol_info else 0
@@ -236,6 +238,45 @@ class Scanner:
             return cmd.power_off(self._mgr)
 
     # ------------------------------------------------------------------
+    # Custom Search Ranges
+    # ------------------------------------------------------------------
+
+    def get_custom_search_groups(self) -> dict | None:
+        with self._cmd_lock:
+            return cmd.get_custom_search_groups(self._mgr)
+
+    def set_custom_search_groups(self, groups: list[bool]) -> bool:
+        with self._cmd_lock:
+            return cmd.set_custom_search_groups(self._mgr, groups)
+
+    def get_custom_search_range(self, index: int) -> dict | None:
+        with self._cmd_lock:
+            return cmd.get_custom_search_range(self._mgr, index)
+
+    def set_custom_search_range(self, index: int, lower_hz: int, upper_hz: int) -> bool:
+        with self._cmd_lock:
+            return cmd.set_custom_search_range(self._mgr, index, lower_hz, upper_hz)
+
+    def get_all_custom_search_ranges(self) -> list[dict]:
+        was_polling = self._polling
+        if was_polling:
+            self._stop_polling()
+        try:
+            with self._cmd_lock:
+                return cmd.get_all_custom_search_ranges(self._mgr)
+        finally:
+            if was_polling:
+                self._start_polling()
+
+    def get_search_settings(self) -> dict | None:
+        with self._cmd_lock:
+            return cmd.get_search_settings(self._mgr)
+
+    def set_search_settings(self, delay: str, code_search: bool) -> bool:
+        with self._cmd_lock:
+            return cmd.set_search_settings(self._mgr, delay, code_search)
+
+    # ------------------------------------------------------------------
     # Background polling
     # ------------------------------------------------------------------
 
@@ -336,6 +377,7 @@ class Scanner:
     def _empty_state() -> dict:
         return {
             "connected":       False,
+            "connected_at":    None,
             "model":           "",
             "firmware":        "",
             "display_line1":   "",

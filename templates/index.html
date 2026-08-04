@@ -32,6 +32,13 @@
           <span class="rec-dot"></span>REC <span id="rec-timer">0:00</span>
         </span>
       </div>
+
+      <!-- Favorites bar -->
+      <div class="fav-bar" id="fav-bar">
+        <span class="fav-bar-empty" id="fav-bar-empty">
+          No favorites yet — star a channel in Channels tab to pin it here
+        </span>
+      </div>
     </div>
   </section>
 
@@ -102,6 +109,20 @@
               <button class="blt-btn" data-mode="AF">Off</button>
             </div>
           </div>
+
+          <!-- Mini Heatmap -->
+          <div class="level-group mini-heatmap-group">
+            <div class="level-header">
+              <span class="level-name">Signal Activity</span>
+              <span class="mini-heatmap-range">24h</span>
+            </div>
+            <div class="mini-heatmap-wrap">
+              <div class="mini-heatmap-y" id="mini-heatmap-y"></div>
+              <div class="mini-heatmap-grid" id="mini-heatmap-grid"></div>
+            </div>
+            <div class="mini-heatmap-tooltip" id="mini-heatmap-tooltip"></div>
+          </div>
+
         </div>
         <div class="levels-right">
           <p class="panel-label">recording</p>
@@ -115,8 +136,44 @@
               <button class="rec-btn rec-btn--stop" id="rec-stop" disabled>■ Stop</button>
             </div>
             <div class="rec-file" id="rec-file">&nbsp;</div>
+            <div class="session-rec-row">
+              <span class="level-name" style="font-size:10px">Auto-Record</span>
+              <button class="sr-toggle session-rec-toggle" id="session-rec-toggle">OFF</button>
+            </div>
+            <div class="session-rec-status" id="session-rec-status"></div>
+
+            <!-- Audio Streaming Player -->
+            <div class="audio-stream-row">
+              <span class="level-name" style="font-size:10px">Live Audio</span>
+              <button class="sr-toggle" id="audio-stream-toggle">OFF</button>
+            </div>
+            <div class="audio-stream-player" id="audio-stream-player" style="display:none">
+              <audio id="audio-stream-el" preload="none" style="width:100%;height:28px;margin-top:4px"></audio>
+              <div class="audio-stream-status" id="audio-stream-status">Connecting…</div>
+            </div>
           </div>
-          <div class="level-group log-group" style="margin-top:12px">
+          <!-- Smart Resume -->
+        <div class="level-group sr-group" style="padding-top:10px;border-top:0.5px solid var(--border)">
+          <div class="level-header">
+            <span class="level-name">Smart Resume</span>
+            <button class="sr-toggle" id="sr-toggle">OFF</button>
+          </div>
+          <div class="sr-body">
+            <div class="sr-meta-row">
+              <span class="sr-count-label">Blocked: <span class="sr-block-count" id="sr-block-count"></span></span>
+              <button class="key key--nav sr-manage-btn" id="sr-manage-btn" style="font-size:10px;padding:3px 8px">Manage</button>
+            </div>
+            <!-- Block button — shows whenever Smart Resume is ON and a freq is visible -->
+            <button class="sr-block-btn" id="sr-block-btn" style="display:none"></button>
+            <div class="sr-status-text" id="sr-status"></div>
+            <div class="sr-blocklist-panel" id="sr-blocklist-panel" style="display:none"></div>
+            <div class="sr-block-row">
+              <button class="key sr-clear-btn" id="sr-clear-all" style="font-size:10px;padding:3px 8px" title="Clear all blocked frequencies">Clear All</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="level-group log-group" style="margin-top:12px">
             <div class="level-header">
               <span class="level-name">Activity</span>
               <button class="log-clear" id="log-clear">Clear</button>
@@ -178,10 +235,30 @@
     </div>
   </div>
 
+  <!-- Search bar -->
+  <div class="ch-search-bar" id="ch-search-bar">
+    <div class="ch-search-input-wrap">
+      <span class="ch-search-icon">⌕</span>
+      <input
+        type="text"
+        id="ch-search-input"
+        class="ch-search-input"
+        placeholder="Search channels by name, frequency or mode…"
+        autocomplete="off"
+      >
+      <button class="ch-search-clear" id="ch-search-clear" title="Clear search">✕</button>
+    </div>
+    <button class="ch-lockout-toggle" id="ch-lockout-toggle" title="Show only locked-out channels">
+      🔒 Lockouts <span class="ch-lockout-count" id="ch-lockout-count"></span>
+    </button>
+    <div class="ch-search-status" id="ch-search-status"></div>
+  </div>
+
   <div class="ch-table-wrap">
     <table class="ch-table">
       <thead>
         <tr>
+          <th></th>
           <th>CH</th>
           <th>Name</th>
           <th>Frequency</th>
@@ -194,7 +271,7 @@
         </tr>
       </thead>
       <tbody id="ch-tbody">
-        <tr><td colspan="9" class="ch-empty">Select a bank and click Load Bank</td></tr>
+        <tr><td colspan="10" class="ch-empty">Select a bank and click Load Bank</td></tr>
       </tbody>
     </table>
   </div>
@@ -348,6 +425,42 @@
     </p>
   </section>
 
+  <!-- Custom Search Ranges -->
+  <section class="panel settings-panel">
+    <div class="search-ranges-header">
+      <p class="panel-label" style="margin:0">custom search ranges</p>
+      <button class="key key--nav" id="search-ranges-refresh">Refresh</button>
+    </div>
+    <p class="setting-hint" style="margin-bottom:10px">
+      Define up to 10 custom frequency ranges for Search mode (press
+      <kbd>R</kbd> on the keypad or dashboard). Toggle a range on/off and
+      set its lower/upper limits in MHz (25.0000–512.0000).
+    </p>
+    <div class="search-ranges-list" id="search-ranges-list">
+      <span class="log-empty">Loading search ranges…</span>
+    </div>
+
+    <div class="search-settings-row">
+      <div class="setting-row">
+        <label class="setting-label">Search Delay (seconds)</label>
+        <select id="search-delay" class="modal-input modal-select" style="max-width:140px">
+          <option value="-10">-10</option>
+          <option value="-5">-5</option>
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+      <label class="modal-check" style="margin-top:18px">
+        <input type="checkbox" id="search-code-search"> CTCSS/DCS Search
+      </label>
+      <button class="key key--action" id="search-settings-save" style="margin-top:14px">Save</button>
+    </div>
+  </section>
+
   <!-- Recording -->
   <section class="panel settings-panel">
     <p class="panel-label">recording</p>
@@ -374,6 +487,193 @@
       <div class="info-row"><span class="info-key">Port</span><span class="info-val" id="inf-port">--</span></div>
       <div class="info-row"><span class="info-key">Poll interval</span><span class="info-val" id="inf-poll">--</span></div>
       <div class="info-row"><span class="info-key">Battery</span><span class="info-val" id="inf-battery">--</span></div>
+    </div>
+  </section>
+
+</div>
+{% endblock %}
+
+{# ── History tab ── #}
+{% block history %}
+<div class="hist-manager">
+
+  <div class="hist-toolbar">
+    <div class="hist-toolbar-left">
+      <div class="ch-search-input-wrap" style="min-width:260px">
+        <span class="ch-search-icon">⌕</span>
+        <input
+          type="text"
+          id="hist-filter"
+          class="ch-search-input"
+          placeholder="Filter by name, frequency, channel…"
+          autocomplete="off"
+        >
+      </div>
+      <button class="ch-lockout-toggle" id="hist-discovery-toggle" title="Show only discovered frequencies (found in search mode, not in programmed channels)">
+        🔍 Discoveries <span class="ch-lockout-count" id="hist-discovery-count"></span>
+      </button>
+    </div>
+    <div class="hist-toolbar-right">
+      <span class="ch-range-label" id="hist-count"></span>
+      <span class="ch-range-label" id="hist-page"></span>
+      <button class="key key--nav" id="hist-prev" disabled>← Prev</button>
+      <button class="key key--nav" id="hist-next" disabled>Next →</button>
+      <button class="key key--nav" id="hist-export" title="Export history as CSV">↓ Export</button>
+      <button class="key" id="hist-clear" title="Clear all history">Clear</button>
+    </div>
+  </div>
+
+  <div class="ch-table-wrap">
+    <table class="ch-table hist-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Time</th>
+          <th>Frequency</th>
+          <th>Channel</th>
+          <th>Name</th>
+          <th>Mode</th>
+          <th>Duration</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="hist-tbody">
+        <tr><td colspan="8" class="ch-empty">No transmissions logged yet</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}
+
+{# ── Status tab ── #}
+{% block status %}
+<div class="status-page">
+
+  <!-- Scanner Info -->
+  <section class="panel status-panel">
+    <p class="panel-label">scanner</p>
+    <div class="status-grid">
+      <div class="status-card">
+        <span class="status-card-label">Connection</span>
+        <span class="status-card-value" id="stat-connection">—</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card-label">Uptime</span>
+        <span class="status-card-value" id="stat-uptime">—</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card-label">Model</span>
+        <span class="status-card-value" id="stat-model">—</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card-label">Firmware</span>
+        <span class="status-card-value" id="stat-firmware">—</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card-label">Port</span>
+        <span class="status-card-value" id="stat-port">—</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card-label">Battery</span>
+        <span class="status-card-value" id="stat-battery">—</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Session vs All-Time -->
+  <div class="status-row">
+
+    <section class="panel status-panel">
+      <p class="panel-label">this session</p>
+      <div class="status-grid status-grid--stats">
+        <div class="status-card">
+          <span class="status-card-label">Transmissions Heard</span>
+          <span class="status-card-value status-card-value--lg" id="stat-session-heard">0</span>
+        </div>
+        <div class="status-card">
+          <span class="status-card-label">Skipped (Smart Resume)</span>
+          <span class="status-card-value status-card-value--lg" id="stat-session-skipped">0</span>
+        </div>
+        <div class="status-card">
+          <span class="status-card-label">Avg Duration</span>
+          <span class="status-card-value" id="stat-session-avg">—</span>
+        </div>
+        <div class="status-card">
+          <span class="status-card-label">Per Hour</span>
+          <span class="status-card-value" id="stat-session-rate">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel status-panel">
+      <p class="panel-label">all time</p>
+      <div class="status-grid status-grid--stats">
+        <div class="status-card">
+          <span class="status-card-label">Transmissions Heard</span>
+          <span class="status-card-value status-card-value--lg" id="stat-all-heard">0</span>
+        </div>
+        <div class="status-card">
+          <span class="status-card-label">Skipped (Smart Resume)</span>
+          <span class="status-card-value status-card-value--lg" id="stat-all-skipped">0</span>
+        </div>
+        <div class="status-card">
+          <span class="status-card-label">Total Logged</span>
+          <span class="status-card-value" id="stat-all-total">0</span>
+        </div>
+        <div class="status-card">
+          <span class="status-card-label">Tracking Since</span>
+          <span class="status-card-value" id="stat-all-since">—</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Busiest Channels -->
+  <section class="panel status-panel">
+    <p class="panel-label">busiest channels (all time)</p>
+    <div class="status-busiest" id="stat-busiest">
+      <span class="log-empty">No data yet — start scanning to populate</span>
+    </div>
+  </section>
+
+  <!-- Signal Heatmap -->
+  <section class="panel status-panel">
+    <div class="heatmap-header">
+      <p class="panel-label" style="margin:0">signal heatmap — last 24 hours</p>
+      <div class="heatmap-legend">
+        <span class="heatmap-legend-label">None</span>
+        <div class="heatmap-legend-bar" id="heatmap-legend-bar"></div>
+        <span class="heatmap-legend-label">Active</span>
+      </div>
+    </div>
+    <div class="heatmap-wrap" id="heatmap-wrap">
+      <div class="heatmap-y-axis" id="heatmap-y-axis"></div>
+      <div class="heatmap-grid-wrap">
+        <div class="heatmap-grid" id="heatmap-grid"></div>
+        <div class="heatmap-x-axis" id="heatmap-x-axis"></div>
+      </div>
+    </div>
+    <div class="heatmap-tooltip" id="heatmap-tooltip"></div>
+  </section>
+
+  <!-- Recordings -->
+  <section class="panel status-panel">
+    <p class="panel-label">recordings</p>
+    <div class="status-grid">
+      <div class="status-card">
+        <span class="status-card-label">Total Files</span>
+        <span class="status-card-value" id="stat-rec-count">0</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card-label">Total Duration</span>
+        <span class="status-card-value" id="stat-rec-duration">—</span>
+      </div>
+      <div class="status-card">
+        <span class="status-card-label">Disk Used</span>
+        <span class="status-card-value" id="stat-rec-size">—</span>
+      </div>
     </div>
   </section>
 

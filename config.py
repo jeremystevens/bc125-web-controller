@@ -20,7 +20,8 @@ class Config:
     FLASK_HOST: str  = os.getenv("FLASK_HOST", "0.0.0.0")
     FLASK_PORT: int  = int(os.getenv("FLASK_PORT", "5000"))
     FLASK_DEBUG: bool = os.getenv("FLASK_DEBUG", "False").lower() == "true"
-    SECRET_KEY: str  = os.getenv("SECRET_KEY", "change-me-in-production")
+    SECRET_KEY: str    = os.getenv("SECRET_KEY", "change-me-in-production")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")   # empty = auth disabled
 
     # ── Recordings ────────────────────────────────────────────────────
     RECORDINGS_DIR: str = os.getenv("RECORDINGS_DIR", "recordings")

@@ -17,3 +17,8 @@ soundfile>=0.12.1
 # NOTE: eventlet is NOT required — async_mode='threading' is used instead.
 # Eventlet 0.37+ has compatibility issues with Flask-SocketIO on Windows.
 # If you have eventlet installed it won't cause problems but isn't needed.
+
+# Production WSGI server (Render.com)
+gunicorn>=21.2.0
+gevent>=23.9.1          # async worker for SocketIO streaming
+gevent-websocket>=0.10  # WebSocket support for gevent

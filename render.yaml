@@ -1,0 +1,30 @@
+# render.yaml — Render.com deployment config for BC125AT Prod_test
+#
+# Deploy at: https://dashboard.render.com/new/web
+# Set environment variables in the Render dashboard:
+#   SCANNER_PORT    — serial port (e.g. /dev/ttyUSB0 on Linux)
+#   ADMIN_PASSWORD  — password for protected features
+#   SECRET_KEY      — random secret for cookie signing (generate with: python -c "import secrets; print(secrets.token_hex(32))")
+#
+# Note: Render free tier does NOT support USB/serial devices.
+# You need at minimum a "Starter" instance with a physical serial port,
+# OR run this on a local machine/VPS with the scanner connected and
+# use Render just as a reverse proxy / tunnel.
+
+services:
+  - type: web
+    name: bc125at-controller
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: SCANNER_PORT
+        value: /dev/ttyUSB0
+      - key: SCANNER_BAUD
+        value: "115200"
+      - key: ADMIN_PASSWORD
+        sync: false          # set in Render dashboard
+      - key: SECRET_KEY
+        generateValue: true  # Render auto-generates a secure random value
+      - key: FLASK_ENV
+        value: production

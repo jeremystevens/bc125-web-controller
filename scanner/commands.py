@@ -726,3 +726,186 @@ def set_channels_bulk(
 
     _exit_program_mode(mgr)
     return written, skipped, errors
+
+
+# ---------------------------------------------------------------------------
+# Custom Search Ranges
+# ---------------------------------------------------------------------------
+#
+# Official BC125AT protocol commands (BC125AT_Protocol.pdf, Appendix C):
+#
+#   CSG  Get/Set Custom Search Group
+#        CSG,##########  — 10 digits, each 0=valid (enabled) / 1=invalid (disabled)
+#        Order matches LCD icons 1-9,0 (i.e. index 10 is the 10th digit)
+#        Cannot set all 10 ranges to disabled at once.
+#
+#   CSP  Get/Set Custom Search Settings
+#        CSP,[INDEX],[LIMIT_L],[LIMIT_H]
+#        INDEX: 1-10
+#        LIMIT_L / LIMIT_H: frequency in wire units (Hz / 100), 250000-5120000
+#                            i.e. 25.0000 MHz - 512.0000 MHz
+#
+#   SCO  Get/Set Search/Close Call Settings
+#        SCO,[DLY],[CODE_SRCH]
+#        DLY: delay time (-10,-5,0,1,2,3,4,5)
+#        CODE_SRCH: CTCSS/DCS search (0:OFF / 1:ON)
+
+CUSTOM_SEARCH_MIN_HZ = 25_000_000    # 25.0000 MHz
+CUSTOM_SEARCH_MAX_HZ = 512_000_000   # 512.0000 MHz
+
+
+def get_custom_search_groups(mgr: SerialManager) -> dict | None:
+    """
+    CSG — Get enabled/disabled state of all 10 custom search ranges.
+    Returns { "groups": [bool, bool, ...] } — True = enabled.
+    Note: wire encoding is inverted (0=valid/enabled, 1=invalid/disabled).
+    """
+    resp  = _send_and_receive(mgr, "CSG")
+    parts = _parse(resp)
+    if not parts or len(parts) < 1:
+        return None
+    digits = parts[0].strip()
+    if len(digits) != 10:
+        return None
+    # 0 = enabled, 1 = disabled — invert for friendlier True=enabled semantics
+    groups = [d == "0" for d in digits]
+    return {"groups": groups}
+
+
+def set_custom_search_groups(mgr: SerialManager, groups: list[bool]) -> bool:
+    """
+    CSG — Set enabled/disabled state of all 10 custom search ranges.
+    groups: list of 10 booleans, True = enabled.
+    Cannot disable all 10 at once — scanner will reject with NG.
+    """
+    if len(groups) != 10:
+        return False
+    if not any(groups):
+        logger.warning("Cannot disable all 10 custom search ranges at once.")
+        return False
+    # Invert: True (enabled) -> "0", False (disabled) -> "1"
+    digits = "".join("0" if g else "1" for g in groups)
+    if not _enter_program_mode(mgr):
+        return False
+    resp = _send_and_receive(mgr, f"CSG,{digits}")
+    _exit_program_mode(mgr)
+    return _ok(resp)
+
+
+def get_custom_search_range(mgr: SerialManager, index: int) -> dict | None:
+    """
+    CSP,[INDEX] — Get the lower/upper frequency limits for one custom search range.
+    index: 1-10
+    """
+    if not 1 <= index <= 10:
+        return None
+    resp  = _send_and_receive(mgr, f"CSP,{index}")
+    parts = _parse(resp)
+    if not parts or len(parts) < 3:
+        return None
+    try:
+        limit_l_wire = int(parts[1].strip())
+        limit_h_wire = int(parts[2].strip())
+    except (ValueError, IndexError):
+        return None
+    return {
+        "index":          index,
+        "lower_hz":       _wire_to_hz(limit_l_wire),
+        "upper_hz":       _wire_to_hz(limit_h_wire),
+        "lower_mhz":      round(_wire_to_hz(limit_l_wire) / 1_000_000, 4),
+        "upper_mhz":      round(_wire_to_hz(limit_h_wire) / 1_000_000, 4),
+    }
+
+
+def set_custom_search_range(mgr: SerialManager, index: int, lower_hz: int, upper_hz: int) -> bool:
+    """
+    CSP,[INDEX],[LIMIT_L],[LIMIT_H] — Set the lower/upper frequency limits
+    for one custom search range.
+    index: 1-10
+    lower_hz / upper_hz: frequency in Hz, must be within 25-512 MHz and
+                          lower_hz < upper_hz.
+    """
+    if not 1 <= index <= 10:
+        return False
+    if not (CUSTOM_SEARCH_MIN_HZ <= lower_hz <= CUSTOM_SEARCH_MAX_HZ):
+        logger.warning("Lower limit %d Hz out of range (25-512 MHz).", lower_hz)
+        return False
+    if not (CUSTOM_SEARCH_MIN_HZ <= upper_hz <= CUSTOM_SEARCH_MAX_HZ):
+        logger.warning("Upper limit %d Hz out of range (25-512 MHz).", upper_hz)
+        return False
+    if lower_hz >= upper_hz:
+        logger.warning("Lower limit must be less than upper limit.")
+        return False
+
+    wire_l = _hz_to_wire(lower_hz)
+    wire_h = _hz_to_wire(upper_hz)
+
+    if not _enter_program_mode(mgr):
+        return False
+    resp = _send_and_receive(mgr, f"CSP,{index},{wire_l},{wire_h}")
+    _exit_program_mode(mgr)
+    return _ok(resp)
+
+
+def get_all_custom_search_ranges(mgr: SerialManager) -> list[dict]:
+    """
+    Fetch all 10 custom search ranges plus their enabled/disabled state
+    in a single program mode session.
+    """
+    results = []
+    if not _enter_program_mode(mgr):
+        return results
+
+    groups_resp  = _send_and_receive(mgr, "CSG", timeout=BULK_CIN_TIMEOUT)
+    groups_parts = _parse(groups_resp)
+    enabled_flags = [False] * 10
+    if groups_parts and len(groups_parts[0]) == 10:
+        enabled_flags = [d == "0" for d in groups_parts[0]]
+
+    for i in range(1, 11):
+        resp  = _send_and_receive(mgr, f"CSP,{i}", timeout=BULK_CIN_TIMEOUT)
+        parts = _parse(resp)
+        if parts and len(parts) >= 3:
+            try:
+                limit_l_wire = int(parts[1].strip())
+                limit_h_wire = int(parts[2].strip())
+                results.append({
+                    "index":     i,
+                    "enabled":   enabled_flags[i - 1],
+                    "lower_hz":  _wire_to_hz(limit_l_wire),
+                    "upper_hz":  _wire_to_hz(limit_h_wire),
+                    "lower_mhz": round(_wire_to_hz(limit_l_wire) / 1_000_000, 4),
+                    "upper_mhz": round(_wire_to_hz(limit_h_wire) / 1_000_000, 4),
+                })
+                continue
+            except (ValueError, IndexError):
+                pass
+        results.append({
+            "index": i, "enabled": enabled_flags[i - 1],
+            "lower_hz": 0, "upper_hz": 0, "lower_mhz": 0.0, "upper_mhz": 0.0,
+        })
+
+    _exit_program_mode(mgr)
+    return results
+
+
+def get_search_settings(mgr: SerialManager) -> dict | None:
+    """SCO — Get search/close call delay and CTCSS/DCS search settings."""
+    resp  = _send_and_receive(mgr, "SCO")
+    parts = _parse(resp)
+    if not parts or len(parts) < 2:
+        return None
+    return {
+        "delay":     parts[0].strip(),
+        "code_search": parts[1].strip() == "1",
+    }
+
+
+def set_search_settings(mgr: SerialManager, delay: str, code_search: bool) -> bool:
+    """SCO,[DLY],[CODE_SRCH] — Set search delay and CTCSS/DCS search toggle."""
+    code = "1" if code_search else "0"
+    if not _enter_program_mode(mgr):
+        return False
+    resp = _send_and_receive(mgr, f"SCO,{delay},{code}")
+    _exit_program_mode(mgr)
+    return _ok(resp)

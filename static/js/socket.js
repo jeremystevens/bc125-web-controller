@@ -48,6 +48,10 @@ function initSocket() {
 
   socket.on('scanner_state', (state) => {
     applyStatus(state);
+    // Direct hooks for modules that need raw state regardless of applyStatus chain
+    if (window.History)           History.onState(state);
+    if (window.SmartResume)       SmartResume.onState(state);
+    if (window.applySessionRecState) applySessionRecState(state);
   });
 
   socket.on('scanner_error', (data) => {
