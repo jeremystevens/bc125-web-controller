@@ -62,19 +62,23 @@ class Scanner:
                 self._mgr.disconnect()
                 return False
 
-            fw_info  = cmd.get_firmware(self._mgr)
+            fw_info = cmd.get_firmware(self._mgr)
             vol_info = cmd.get_volume(self._mgr)
             sql_info = cmd.get_squelch(self._mgr)
             bat_info = cmd.get_battery_voltage(self._mgr)
 
         with self._state_lock:
-            self._state["connected"]     = True
-            self._state["connected_at"]  = datetime.now().isoformat()
-            self._state["model"]         = model_info.get("model", "Unknown")
-            self._state["firmware"]      = fw_info.get("firmware", "Unknown") if fw_info else "Unknown"
-            self._state["volume"]        = vol_info.get("volume", 0) if vol_info else 0
-            self._state["squelch"]       = sql_info.get("squelch", 0) if sql_info else 0
-            self._state["battery_volts"] = bat_info.get("battery_volts", 0.0) if bat_info else 0.0
+            self._state["connected"] = True
+            self._state["connected_at"] = datetime.now().isoformat()
+            self._state["model"] = model_info.get("model", "Unknown")
+            self._state["firmware"] = (
+                fw_info.get("firmware", "Unknown") if fw_info else "Unknown"
+            )
+            self._state["volume"] = vol_info.get("volume", 0) if vol_info else 0
+            self._state["squelch"] = sql_info.get("squelch", 0) if sql_info else 0
+            self._state["battery_volts"] = (
+                bat_info.get("battery_volts", 0.0) if bat_info else 0.0
+            )
 
         logger.info(
             "Scanner ready: %s  Firmware: %s  Battery: %.2fV",
@@ -305,7 +309,9 @@ class Scanner:
                 logger.warning("Connection lost — attempting reconnect...")
                 if self._on_error:
                     try:
-                        self._on_error("Scanner connection lost — attempting to reconnect.")
+                        self._on_error(
+                            "Scanner connection lost — attempting to reconnect."
+                        )
                     except Exception:
                         pass
                 if not self._mgr.reconnect():
@@ -339,23 +345,23 @@ class Scanner:
         """
         with self._cmd_lock:
             status = cmd.get_status(self._mgr)
-            glg    = cmd.get_reception_status(self._mgr)
+            glg = cmd.get_reception_status(self._mgr)
 
         with self._state_lock:
             if status:
-                self._state["display_line1"]   = status["display_line1"]
-                self._state["display_line2"]   = status["display_line2"]
+                self._state["display_line1"] = status["display_line1"]
+                self._state["display_line2"] = status["display_line2"]
                 self._state["signal_strength"] = status["signal_strength"]
-                self._state["squelch_open"]    = status["squelch_open"]
-                self._state["muted"]           = status["muted"]
+                self._state["squelch_open"] = status["squelch_open"]
+                self._state["muted"] = status["muted"]
 
             if glg:
                 # Only update frequency fields if GLG returned valid data
                 # (GLG returns None when scanner is between channels)
                 if glg["frequency_mhz"] > 0:
                     self._state["frequency_mhz"] = glg["frequency_mhz"]
-                    self._state["modulation"]    = glg["modulation"]
-                self._state["channel_id"]   = glg["channel_id"]
+                    self._state["modulation"] = glg["modulation"]
+                self._state["channel_id"] = glg["channel_id"]
                 self._state["channel_name"] = glg["channel_name"]
 
             # Always emit snapshot — even if nothing changed
@@ -376,20 +382,20 @@ class Scanner:
     @staticmethod
     def _empty_state() -> dict:
         return {
-            "connected":       False,
-            "connected_at":    None,
-            "model":           "",
-            "firmware":        "",
-            "display_line1":   "",
-            "display_line2":   "",
-            "frequency_mhz":   0.0,
-            "modulation":      "",
-            "channel_id":      0,
-            "channel_name":    "",
+            "connected": False,
+            "connected_at": None,
+            "model": "",
+            "firmware": "",
+            "display_line1": "",
+            "display_line2": "",
+            "frequency_mhz": 0.0,
+            "modulation": "",
+            "channel_id": 0,
+            "channel_name": "",
             "signal_strength": 0,
-            "squelch_open":    False,
-            "muted":           False,
-            "volume":          0,
-            "squelch":         0,
-            "battery_volts":   0.0,
+            "squelch_open": False,
+            "muted": False,
+            "volume": 0,
+            "squelch": 0,
+            "battery_volts": 0.0,
         }

@@ -24,41 +24,45 @@ from typing import Generator
 logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 44100
-CHANNELS    = 1
-DTYPE       = "int16"
-CHUNK_FRAMES = 4096   # ~93ms per chunk at 44100 Hz
+CHANNELS = 1
+DTYPE = "int16"
+CHUNK_FRAMES = 4096  # ~93ms per chunk at 44100 Hz
 
 # Global shared state — one input stream, multiple subscriber queues
-_lock        = threading.Lock()
-_stream      = None          # sounddevice InputStream
+_lock = threading.Lock()
+_stream = None  # sounddevice InputStream
 _subscribers: list[queue.Queue] = []
 _stream_lock = threading.Lock()
 
 
-def _wav_header(sample_rate: int = SAMPLE_RATE, channels: int = CHANNELS,
-                bits: int = 16) -> bytes:
+def _wav_header(
+    sample_rate: int = SAMPLE_RATE, channels: int = CHANNELS, bits: int = 16
+) -> bytes:
     """
     Build a WAV header for a streaming (unknown-length) file.
     Uses 0xFFFFFFFF for the data chunk size — browsers ignore it and
     just play until the stream ends.
     """
-    data_size   = 0xFFFFFFFF
-    chunk_size  = 0xFFFFFFFF   # also max — avoids overflow
-    byte_rate   = sample_rate * channels * (bits // 8)
+    data_size = 0xFFFFFFFF
+    chunk_size = 0xFFFFFFFF  # also max — avoids overflow
+    byte_rate = sample_rate * channels * (bits // 8)
     block_align = channels * (bits // 8)
 
     return struct.pack(
-        '<4sI4s4sIHHIIHH4sI',
-        b'RIFF', chunk_size,
-        b'WAVE',
-        b'fmt ', 16,
-        1,             # PCM format
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF",
+        chunk_size,
+        b"WAVE",
+        b"fmt ",
+        16,
+        1,  # PCM format
         channels,
         sample_rate,
         byte_rate,
         block_align,
         bits,
-        b'data', data_size,
+        b"data",
+        data_size,
     )
 
 
@@ -86,12 +90,13 @@ def _ensure_stream_running() -> bool:
             return True
         try:
             import sounddevice as sd
+
             _stream = sd.InputStream(
-                samplerate   = SAMPLE_RATE,
-                channels     = CHANNELS,
-                dtype        = DTYPE,
-                blocksize    = CHUNK_FRAMES,
-                callback     = _audio_callback,
+                samplerate=SAMPLE_RATE,
+                channels=CHANNELS,
+                dtype=DTYPE,
+                blocksize=CHUNK_FRAMES,
+                callback=_audio_callback,
             )
             _stream.start()
             logger.info("Audio stream started — %d Hz mono", SAMPLE_RATE)
@@ -140,7 +145,7 @@ def audio_stream_generator() -> Generator[bytes, None, None]:
                 yield chunk
             except queue.Empty:
                 # Heartbeat — keep connection alive
-                yield b''
+                yield b""
     except GeneratorExit:
         pass
     finally:

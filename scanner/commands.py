@@ -25,27 +25,107 @@ RESPONSE_TIMEOUT = 2.0
 
 # Frequency scale: wire values are in units of 100 Hz
 FREQUENCY_SCALE = 100
-MIN_FREQUENCY_HZ = 25_000_000    # 25 MHz  (wire: 250000)
-MAX_FREQUENCY_HZ = 512_000_000   # 512 MHz (wire: 5120000)
+MIN_FREQUENCY_HZ = 25_000_000  # 25 MHz  (wire: 250000)
+MAX_FREQUENCY_HZ = 512_000_000  # 512 MHz (wire: 5120000)
 
 # BC125AT special LCD character map (byte value → UTF-8 replacement)
 BYTE_MAP = {
-    0x80: '█', 0x81: '↑', 0x82: '↓', 0x83: 'Lo', 0x84: 'Bat', 0x85: 'Lo',
-    0x86: 'ck', 0x87: 'C', 0x88: 'C', 0x89: 'C', 0x8A: 'C', 0x8B: '🄵',
-    0x8C: '🄿', 0x8D: 'H', 0x8E: 'O', 0x8F: 'L', 0x90: 'D', 0x91: '+',
-    0x92: '🄲', 0x93: 'T', 0x94: 'L', 0x95: 'L', 0x96: '/', 0x97: 'O',
-    0x98: ' ', 0x99: 'A', 0x9A: 'M', 0x9B: ' ', 0x9C: 'F', 0x9D: 'N',
-    0x9E: 'F', 0x9F: ' ', 0xA0: ' ', 0xA1: 'P', 0xA2: 'RI', 0xA3: ' ',
-    0xA4: ' ', 0xA5: ' ', 0xA6: '1', 0xA7: '2', 0xA8: '3', 0xA9: '📶',
-    0xAA: '4', 0xAB: '📶', 0xAC: '5', 0xAD: '📶', 0xAE: ' ', 0xAF: ' ',
-    0xB0: ' ', 0xB1: '[', 0xB2: '█', 0xB3: ']', 0xB4: ' ', 0xB5: 'C',
-    0xB6: 'C', 0xB7: 'C', 0xB8: 'C', 0xB9: ' ', 0xBA: ' ', 0xBB: ' ',
-    0xBC: ' ', 0xBD: ' ', 0xBE: ' ', 0xBF: ' ', 0xC0: ' ', 0xC1: ' ',
-    0xC2: ' ', 0xC3: ' ', 0xC4: ' ', 0xC5: 'S', 0xC6: 'R', 0xC7: 'C:',
-    0xC8: ' ', 0xC9: ' ', 0xCA: ' ', 0xCB: ' ', 0xCC: ' ', 0xCD: 'B',
-    0xCE: 'N', 0xCF: 'K:', 0xD0: ' ', 0xD1: ' ', 0xD2: ' ', 0xD3: ' ',
-    0xD4: 'S', 0xD5: 'V', 0xD6: 'C:', 0xD7: 'D:', 0xD8: 'P', 0xD9: 'R',
-    0xDA: 'I', 0xDB: ' ', 0xDC: ' ', 0xDD: ' ', 0xDE: ' ', 0xDF: ' ',
+    0x80: "█",
+    0x81: "↑",
+    0x82: "↓",
+    0x83: "Lo",
+    0x84: "Bat",
+    0x85: "Lo",
+    0x86: "ck",
+    0x87: "C",
+    0x88: "C",
+    0x89: "C",
+    0x8A: "C",
+    0x8B: "🄵",
+    0x8C: "🄿",
+    0x8D: "H",
+    0x8E: "O",
+    0x8F: "L",
+    0x90: "D",
+    0x91: "+",
+    0x92: "🄲",
+    0x93: "T",
+    0x94: "L",
+    0x95: "L",
+    0x96: "/",
+    0x97: "O",
+    0x98: " ",
+    0x99: "A",
+    0x9A: "M",
+    0x9B: " ",
+    0x9C: "F",
+    0x9D: "N",
+    0x9E: "F",
+    0x9F: " ",
+    0xA0: " ",
+    0xA1: "P",
+    0xA2: "RI",
+    0xA3: " ",
+    0xA4: " ",
+    0xA5: " ",
+    0xA6: "1",
+    0xA7: "2",
+    0xA8: "3",
+    0xA9: "📶",
+    0xAA: "4",
+    0xAB: "📶",
+    0xAC: "5",
+    0xAD: "📶",
+    0xAE: " ",
+    0xAF: " ",
+    0xB0: " ",
+    0xB1: "[",
+    0xB2: "█",
+    0xB3: "]",
+    0xB4: " ",
+    0xB5: "C",
+    0xB6: "C",
+    0xB7: "C",
+    0xB8: "C",
+    0xB9: " ",
+    0xBA: " ",
+    0xBB: " ",
+    0xBC: " ",
+    0xBD: " ",
+    0xBE: " ",
+    0xBF: " ",
+    0xC0: " ",
+    0xC1: " ",
+    0xC2: " ",
+    0xC3: " ",
+    0xC4: " ",
+    0xC5: "S",
+    0xC6: "R",
+    0xC7: "C:",
+    0xC8: " ",
+    0xC9: " ",
+    0xCA: " ",
+    0xCB: " ",
+    0xCC: " ",
+    0xCD: "B",
+    0xCE: "N",
+    0xCF: "K:",
+    0xD0: " ",
+    0xD1: " ",
+    0xD2: " ",
+    0xD3: " ",
+    0xD4: "S",
+    0xD5: "V",
+    0xD6: "C:",
+    0xD7: "D:",
+    0xD8: "P",
+    0xD9: "R",
+    0xDA: "I",
+    0xDB: " ",
+    0xDC: " ",
+    0xDD: " ",
+    0xDE: " ",
+    0xDF: " ",
 }
 
 # Friendly name → single-character KEY code (KEY requires exactly 1 char)
@@ -58,34 +138,42 @@ BYTE_MAP = {
 #   These are NOT supported by the BC125AT KEY command.
 #   Weather and down arrow can only be operated physically on the scanner.
 KEY_MAP: dict[str, str] = {
-    "func":    "F",
-    "scan":    "S",
-    "hold":    "H",
-    "search":  "R",
+    "func": "F",
+    "scan": "S",
+    "hold": "H",
+    "search": "R",
     "lockout": "L",
-    "power":   "P",
-    "enter":   "E",
-    "up":      "^",
-    "left":    "<",
-    "right":   ">",
-    "0": "0", "1": "1", "2": "2", "3": "3", "4": "4",
-    "5": "5", "6": "6", "7": "7", "8": "8", "9": "9",
+    "power": "P",
+    "enter": "E",
+    "up": "^",
+    "left": "<",
+    "right": ">",
+    "0": "0",
+    "1": "1",
+    "2": "2",
+    "3": "3",
+    "4": "4",
+    "5": "5",
+    "6": "6",
+    "7": "7",
+    "8": "8",
+    "9": "9",
     "dot": ".",
 }
 
-KEY_PRESS      = "P"
+KEY_PRESS = "P"
 KEY_LONG_PRESS = "L"
-KEY_HOLD       = "H"
-KEY_RELEASE    = "R"
+KEY_HOLD = "H"
+KEY_RELEASE = "R"
 
 BACKLIGHT_ALIASES: dict[str, str] = {
-    "on":  "AO",
+    "on": "AO",
     "off": "AF",
-    "ao":  "AO",
-    "af":  "AF",
-    "ky":  "KY",
-    "sq":  "SQ",
-    "ks":  "KS",
+    "ao": "AO",
+    "af": "AF",
+    "ky": "KY",
+    "sq": "SQ",
+    "ks": "KS",
 }
 BACKLIGHT_MODES = ("AO", "AF", "KY", "SQ", "KS")
 
@@ -96,6 +184,7 @@ PRIORITY_MODES = {"0": "Off", "1": "On", "2": "Plus", "3": "DND"}
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _decode_display(raw: str) -> str:
     """Replace special BC125AT LCD bytes (0x80-0xDF) with readable UTF-8."""
     result = []
@@ -104,10 +193,10 @@ def _decode_display(raw: str) -> str:
         if code in BYTE_MAP:
             result.append(BYTE_MAP[code])
         elif code < 0x20 or code == 0x7F:
-            result.append('')
+            result.append("")
         else:
             result.append(ch)
-    return ''.join(result).strip()
+    return "".join(result).strip()
 
 
 def _wire_to_hz(wire_value: int) -> int:
@@ -120,7 +209,9 @@ def _hz_to_wire(freq_hz: int) -> int:
     return freq_hz // FREQUENCY_SCALE
 
 
-def _send_and_receive(mgr: SerialManager, cmd: str, timeout: float = RESPONSE_TIMEOUT) -> str | None:
+def _send_and_receive(
+    mgr: SerialManager, cmd: str, timeout: float = RESPONSE_TIMEOUT
+) -> str | None:
     """
     Send *cmd*, return the first non-empty response line or None on timeout.
     timeout: override the default RESPONSE_TIMEOUT for faster bulk reads.
@@ -134,7 +225,7 @@ def _send_and_receive(mgr: SerialManager, cmd: str, timeout: float = RESPONSE_TI
         line = mgr.read_line()
         if line:
             return line
-        time.sleep(0.01)   # 10ms poll — 5x faster than original 50ms
+        time.sleep(0.01)  # 10ms poll — 5x faster than original 50ms
 
     logger.warning("No response to command: %s", cmd)
     return None
@@ -174,7 +265,9 @@ def _parse(response: str | None) -> list[str] | None:
     if not result:
         return None
     if result[0] == "NG":
-        logger.warning("Scanner returned NG (wrong mode or invalid params): %s", response)
+        logger.warning(
+            "Scanner returned NG (wrong mode or invalid params): %s", response
+        )
         return None
     return result
 
@@ -188,7 +281,7 @@ def _ok(response: str | None) -> bool:
 def _safe_int(value: str, default: int = 0) -> int:
     try:
         return int(value.strip())
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return default
 
 
@@ -209,6 +302,7 @@ def _exit_program_mode(mgr: SerialManager) -> None:
 # ---------------------------------------------------------------------------
 # Identification
 # ---------------------------------------------------------------------------
+
 
 def get_model(mgr: SerialManager) -> dict | None:
     """MDL — Request scanner model. Response: MDL,BC125AT"""
@@ -232,6 +326,7 @@ def get_firmware(mgr: SerialManager) -> dict | None:
 # Status polling
 # ---------------------------------------------------------------------------
 
+
 def get_status(mgr: SerialManager) -> dict | None:
     """
     STS — Get scanner status (unofficial).
@@ -244,14 +339,14 @@ def get_status(mgr: SerialManager) -> dict | None:
     while len(parts) < 7:
         parts.append("")
     return {
-        "raw":             resp,
-        "display_line1":   _decode_display(parts[0]),
-        "display_line2":   _decode_display(parts[1]),
-        "icon_flags":      parts[2].strip(),
+        "raw": resp,
+        "display_line1": _decode_display(parts[0]),
+        "display_line2": _decode_display(parts[1]),
+        "icon_flags": parts[2].strip(),
         "signal_strength": _safe_int(parts[3], 0),
-        "squelch_open":    parts[4].strip() == "1",
-        "muted":           parts[5].strip() == "1",
-        "battery":         parts[6].strip() if len(parts) > 6 else "",
+        "squelch_open": parts[4].strip() == "1",
+        "muted": parts[5].strip() == "1",
+        "battery": parts[6].strip() if len(parts) > 6 else "",
     }
 
 
@@ -268,19 +363,19 @@ def get_reception_status(mgr: SerialManager) -> dict | None:
     while len(parts) < 9:
         parts.append("")
     wire_freq = _safe_int(parts[0], 0)
-    freq_hz   = _wire_to_hz(wire_freq)
+    freq_hz = _wire_to_hz(wire_freq)
     return {
-        "raw":            resp,
-        "frequency_hz":   freq_hz,
-        "frequency_mhz":  round(freq_hz / 1_000_000, 4) if freq_hz else 0.0,
-        "modulation":     parts[1].strip(),
-        "attenuation":    parts[2].strip(),
+        "raw": resp,
+        "frequency_hz": freq_hz,
+        "frequency_mhz": round(freq_hz / 1_000_000, 4) if freq_hz else 0.0,
+        "modulation": parts[1].strip(),
+        "attenuation": parts[2].strip(),
         "ctcss_dcs_tone": parts[3].strip(),
-        "group_id":       parts[4].strip(),
-        "channel_id":     _safe_int(parts[5], 0),
-        "channel_name":   parts[6].strip(),
-        "squelch_open":   parts[7].strip() == "1",
-        "muted":          parts[8].strip() == "1",
+        "group_id": parts[4].strip(),
+        "channel_id": _safe_int(parts[5], 0),
+        "channel_name": parts[6].strip(),
+        "squelch_open": parts[7].strip() == "1",
+        "muted": parts[8].strip() == "1",
     }
 
 
@@ -289,7 +384,7 @@ def get_battery_voltage(mgr: SerialManager) -> dict | None:
     resp = _send_and_receive(mgr, "BAV")
     parts = _parse(resp)
     if parts:
-        raw   = _safe_int(parts[0], 0)
+        raw = _safe_int(parts[0], 0)
         volts = round(raw * 6.4 / 1023, 2)
         return {"battery_raw": raw, "battery_volts": volts}
     return None
@@ -298,6 +393,7 @@ def get_battery_voltage(mgr: SerialManager) -> dict | None:
 # ---------------------------------------------------------------------------
 # Volume & squelch — GET and SET both exist on BC125AT
 # ---------------------------------------------------------------------------
+
 
 def get_volume(mgr: SerialManager) -> dict | None:
     """VOL — Get current volume level (0-15). Response: VOL,<level>"""
@@ -335,6 +431,7 @@ def set_squelch(mgr: SerialManager, level: int) -> bool:
 # Key press
 # ---------------------------------------------------------------------------
 
+
 def press_key(mgr: SerialManager, key: str, action: str = KEY_PRESS) -> bool:
     """
     KEY,<code>,<action> — Simulate a key action.
@@ -354,6 +451,7 @@ def press_key(mgr: SerialManager, key: str, action: str = KEY_PRESS) -> bool:
 # Backlight (requires program mode)
 # NOTE: GET response has trailing comma: BLT,AO,  — handled by _parse
 # ---------------------------------------------------------------------------
+
 
 def get_backlight(mgr: SerialManager) -> dict | None:
     """BLT — Get backlight mode. Requires program mode. Response: BLT,<mode>,"""
@@ -375,7 +473,9 @@ def set_backlight(mgr: SerialManager, mode: str) -> bool:
     """
     code = BACKLIGHT_ALIASES.get(mode.lower())
     if code is None:
-        logger.warning("Invalid backlight mode: '%s'  Valid: %s", mode, ", ".join(BACKLIGHT_MODES))
+        logger.warning(
+            "Invalid backlight mode: '%s'  Valid: %s", mode, ", ".join(BACKLIGHT_MODES)
+        )
         return False
     if not _enter_program_mode(mgr):
         return False
@@ -388,6 +488,7 @@ def set_backlight(mgr: SerialManager, mode: str) -> bool:
 # Channel (requires program mode)
 # CIN frequency field is in wire units (100 Hz)
 # ---------------------------------------------------------------------------
+
 
 def get_channel(mgr: SerialManager, channel: int) -> dict | None:
     """
@@ -405,17 +506,17 @@ def get_channel(mgr: SerialManager, channel: int) -> dict | None:
     while len(parts) < 8:
         parts.append("")
     wire_freq = _safe_int(parts[2], 0)
-    freq_hz   = _wire_to_hz(wire_freq)
+    freq_hz = _wire_to_hz(wire_freq)
     return {
-        "channel":       _safe_int(parts[0], channel),
-        "name":          parts[1].strip(),
-        "frequency_hz":  freq_hz,
+        "channel": _safe_int(parts[0], channel),
+        "name": parts[1].strip(),
+        "frequency_hz": freq_hz,
         "frequency_mhz": round(freq_hz / 1_000_000, 4) if freq_hz else 0.0,
-        "modulation":    parts[3].strip(),
-        "ctcss_dcs":     parts[4].strip(),
-        "delay":         parts[5].strip(),
-        "locked_out":    parts[6].strip() == "1",
-        "priority":      parts[7].strip() == "1",
+        "modulation": parts[3].strip(),
+        "ctcss_dcs": parts[4].strip(),
+        "delay": parts[5].strip(),
+        "locked_out": parts[6].strip() == "1",
+        "priority": parts[7].strip() == "1",
     }
 
 
@@ -431,6 +532,7 @@ def jump_to_channel(mgr: SerialManager, channel: int) -> bool:
 # Official doc: "########## (each # is 0 or 1) : 0 : valid / 1 : invalid"
 # ---------------------------------------------------------------------------
 
+
 def get_scan_groups(mgr: SerialManager) -> dict | None:
     """SCG — Get scan channel group states. Requires program mode."""
     if not _enter_program_mode(mgr):
@@ -439,8 +541,8 @@ def get_scan_groups(mgr: SerialManager) -> dict | None:
     _exit_program_mode(mgr)
     parts = _parse(resp)
     if parts:
-        raw    = parts[0].strip()
-        groups = [c == "0" for c in raw]   # '0'=enabled, '1'=disabled
+        raw = parts[0].strip()
+        groups = [c == "0" for c in raw]  # '0'=enabled, '1'=disabled
         return {"groups": groups, "raw": raw}
     return None
 
@@ -466,6 +568,7 @@ def set_scan_groups(mgr: SerialManager, groups: list[bool]) -> bool:
 # Priority mode (requires program mode)
 # ---------------------------------------------------------------------------
 
+
 def get_priority_mode(mgr: SerialManager) -> dict | None:
     """PRI — Get priority mode. Requires program mode."""
     if not _enter_program_mode(mgr):
@@ -475,7 +578,10 @@ def get_priority_mode(mgr: SerialManager) -> dict | None:
     parts = _parse(resp)
     if parts:
         code = parts[0].strip()
-        return {"priority_mode": code, "description": PRIORITY_MODES.get(code, "Unknown")}
+        return {
+            "priority_mode": code,
+            "description": PRIORITY_MODES.get(code, "Unknown"),
+        }
     return None
 
 
@@ -495,6 +601,7 @@ def set_priority_mode(mgr: SerialManager, mode: str) -> bool:
 # Power
 # ---------------------------------------------------------------------------
 
+
 def power_off(mgr: SerialManager) -> bool:
     """POF — Power off the scanner (unofficial)."""
     resp = _send_and_receive(mgr, "POF")
@@ -504,6 +611,7 @@ def power_off(mgr: SerialManager) -> bool:
 # ---------------------------------------------------------------------------
 # Program mode (public wrappers)
 # ---------------------------------------------------------------------------
+
 
 def enter_program_mode(mgr: SerialManager) -> bool:
     return _enter_program_mode(mgr)
@@ -516,6 +624,7 @@ def exit_program_mode(mgr: SerialManager) -> None:
 # ---------------------------------------------------------------------------
 # Convenience wrappers
 # ---------------------------------------------------------------------------
+
 
 def start_scan(mgr: SerialManager) -> bool:
     return press_key(mgr, "scan")
@@ -552,11 +661,11 @@ def set_channel(
     Requires program mode. Name max 16 chars, alphanumeric + spaces.
     freq_hz: frequency in Hz (25 MHz – 512 MHz), 0 to clear the channel.
     """
-    name      = name[:16].strip()
+    name = name[:16].strip()
     wire_freq = _hz_to_wire(freq_hz) if freq_hz else 0
-    mod       = modulation.upper() if modulation.upper() in MODULATION_MODES else "FM"
-    lout      = "1" if locked_out else "0"
-    pri       = "1" if priority else "0"
+    mod = modulation.upper() if modulation.upper() in MODULATION_MODES else "FM"
+    lout = "1" if locked_out else "0"
+    pri = "1" if priority else "0"
 
     if not _enter_program_mode(mgr):
         return False
@@ -589,34 +698,38 @@ def get_channels_bulk(mgr: SerialManager, start: int, end: int) -> list[dict]:
         return results
 
     for ch in range(start, end + 1):
-        resp  = _send_and_receive(mgr, f"CIN,{ch}", timeout=BULK_CIN_TIMEOUT)
+        resp = _send_and_receive(mgr, f"CIN,{ch}", timeout=BULK_CIN_TIMEOUT)
         parts = _parse(resp)
         if parts and len(parts) >= 8:
             wire_freq = _safe_int(parts[2], 0)
-            freq_hz   = _wire_to_hz(wire_freq)
-            results.append({
-                "channel":       _safe_int(parts[0], ch),
-                "name":          parts[1].strip(),
-                "frequency_hz":  freq_hz,
-                "frequency_mhz": round(freq_hz / 1_000_000, 4) if freq_hz else 0.0,
-                "modulation":    parts[3].strip(),
-                "ctcss_dcs":     parts[4].strip(),
-                "delay":         parts[5].strip(),
-                "locked_out":    parts[6].strip() == "1",
-                "priority":      parts[7].strip() == "1",
-            })
+            freq_hz = _wire_to_hz(wire_freq)
+            results.append(
+                {
+                    "channel": _safe_int(parts[0], ch),
+                    "name": parts[1].strip(),
+                    "frequency_hz": freq_hz,
+                    "frequency_mhz": round(freq_hz / 1_000_000, 4) if freq_hz else 0.0,
+                    "modulation": parts[3].strip(),
+                    "ctcss_dcs": parts[4].strip(),
+                    "delay": parts[5].strip(),
+                    "locked_out": parts[6].strip() == "1",
+                    "priority": parts[7].strip() == "1",
+                }
+            )
         else:
-            results.append({
-                "channel":       ch,
-                "name":          "",
-                "frequency_hz":  0,
-                "frequency_mhz": 0.0,
-                "modulation":    "FM",
-                "ctcss_dcs":     "0",
-                "delay":         "2",
-                "locked_out":    False,
-                "priority":      False,
-            })
+            results.append(
+                {
+                    "channel": ch,
+                    "name": "",
+                    "frequency_hz": 0,
+                    "frequency_mhz": 0.0,
+                    "modulation": "FM",
+                    "ctcss_dcs": "0",
+                    "delay": "2",
+                    "locked_out": False,
+                    "priority": False,
+                }
+            )
 
     _exit_program_mode(mgr)
     return results
@@ -634,34 +747,38 @@ def get_all_channels_bulk(mgr: SerialManager) -> list[dict]:
         return results
 
     for ch in range(1, 501):
-        resp  = _send_and_receive(mgr, f"CIN,{ch}", timeout=BULK_CIN_TIMEOUT)
+        resp = _send_and_receive(mgr, f"CIN,{ch}", timeout=BULK_CIN_TIMEOUT)
         parts = _parse(resp)
         if parts and len(parts) >= 8:
             wire_freq = _safe_int(parts[2], 0)
-            freq_hz   = _wire_to_hz(wire_freq)
-            results.append({
-                "channel":       _safe_int(parts[0], ch),
-                "name":          parts[1].strip(),
-                "frequency_hz":  freq_hz,
-                "frequency_mhz": round(freq_hz / 1_000_000, 4) if freq_hz else 0.0,
-                "modulation":    parts[3].strip(),
-                "ctcss_dcs":     parts[4].strip(),
-                "delay":         parts[5].strip(),
-                "locked_out":    parts[6].strip() == "1",
-                "priority":      parts[7].strip() == "1",
-            })
+            freq_hz = _wire_to_hz(wire_freq)
+            results.append(
+                {
+                    "channel": _safe_int(parts[0], ch),
+                    "name": parts[1].strip(),
+                    "frequency_hz": freq_hz,
+                    "frequency_mhz": round(freq_hz / 1_000_000, 4) if freq_hz else 0.0,
+                    "modulation": parts[3].strip(),
+                    "ctcss_dcs": parts[4].strip(),
+                    "delay": parts[5].strip(),
+                    "locked_out": parts[6].strip() == "1",
+                    "priority": parts[7].strip() == "1",
+                }
+            )
         else:
-            results.append({
-                "channel":       ch,
-                "name":          "",
-                "frequency_hz":  0,
-                "frequency_mhz": 0.0,
-                "modulation":    "FM",
-                "ctcss_dcs":     "0",
-                "delay":         "2",
-                "locked_out":    False,
-                "priority":      False,
-            })
+            results.append(
+                {
+                    "channel": ch,
+                    "name": "",
+                    "frequency_hz": 0,
+                    "frequency_mhz": 0.0,
+                    "modulation": "FM",
+                    "ctcss_dcs": "0",
+                    "delay": "2",
+                    "locked_out": False,
+                    "priority": False,
+                }
+            )
 
     _exit_program_mode(mgr)
     return results
@@ -688,21 +805,21 @@ def set_channels_bulk(
     """
     written = 0
     skipped = 0
-    errors  = []
-    total   = len(channels)
+    errors = []
+    total = len(channels)
 
     if not _enter_program_mode(mgr):
         return 0, total, ["Could not enter program mode"]
 
     for i, ch in enumerate(channels):
-        ch_num    = ch.get("channel", 0)
-        name      = str(ch.get("name", ""))[:16].strip()
-        freq_hz   = int(ch.get("freq_hz", ch.get("frequency_hz", 0)))
-        mod       = str(ch.get("modulation", "FM")).upper()
+        ch_num = ch.get("channel", 0)
+        name = str(ch.get("name", ""))[:16].strip()
+        freq_hz = int(ch.get("freq_hz", ch.get("frequency_hz", 0)))
+        mod = str(ch.get("modulation", "FM")).upper()
         ctcss_dcs = str(ch.get("ctcss_dcs", "0"))
-        delay     = str(ch.get("delay", "2"))
-        locked    = "1" if ch.get("locked_out") else "0"
-        priority  = "1" if ch.get("priority") else "0"
+        delay = str(ch.get("delay", "2"))
+        locked = "1" if ch.get("locked_out") else "0"
+        priority = "1" if ch.get("priority") else "0"
 
         wire_freq = _hz_to_wire(freq_hz) if freq_hz else 0
 
@@ -750,8 +867,8 @@ def set_channels_bulk(
 #        DLY: delay time (-10,-5,0,1,2,3,4,5)
 #        CODE_SRCH: CTCSS/DCS search (0:OFF / 1:ON)
 
-CUSTOM_SEARCH_MIN_HZ = 25_000_000    # 25.0000 MHz
-CUSTOM_SEARCH_MAX_HZ = 512_000_000   # 512.0000 MHz
+CUSTOM_SEARCH_MIN_HZ = 25_000_000  # 25.0000 MHz
+CUSTOM_SEARCH_MAX_HZ = 512_000_000  # 512.0000 MHz
 
 
 def get_custom_search_groups(mgr: SerialManager) -> dict | None:
@@ -760,7 +877,7 @@ def get_custom_search_groups(mgr: SerialManager) -> dict | None:
     Returns { "groups": [bool, bool, ...] } — True = enabled.
     Note: wire encoding is inverted (0=valid/enabled, 1=invalid/disabled).
     """
-    resp  = _send_and_receive(mgr, "CSG")
+    resp = _send_and_receive(mgr, "CSG")
     parts = _parse(resp)
     if not parts or len(parts) < 1:
         return None
@@ -799,25 +916,27 @@ def get_custom_search_range(mgr: SerialManager, index: int) -> dict | None:
     """
     if not 1 <= index <= 10:
         return None
-    resp  = _send_and_receive(mgr, f"CSP,{index}")
+    resp = _send_and_receive(mgr, f"CSP,{index}")
     parts = _parse(resp)
     if not parts or len(parts) < 3:
         return None
     try:
         limit_l_wire = int(parts[1].strip())
         limit_h_wire = int(parts[2].strip())
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return None
     return {
-        "index":          index,
-        "lower_hz":       _wire_to_hz(limit_l_wire),
-        "upper_hz":       _wire_to_hz(limit_h_wire),
-        "lower_mhz":      round(_wire_to_hz(limit_l_wire) / 1_000_000, 4),
-        "upper_mhz":      round(_wire_to_hz(limit_h_wire) / 1_000_000, 4),
+        "index": index,
+        "lower_hz": _wire_to_hz(limit_l_wire),
+        "upper_hz": _wire_to_hz(limit_h_wire),
+        "lower_mhz": round(_wire_to_hz(limit_l_wire) / 1_000_000, 4),
+        "upper_mhz": round(_wire_to_hz(limit_h_wire) / 1_000_000, 4),
     }
 
 
-def set_custom_search_range(mgr: SerialManager, index: int, lower_hz: int, upper_hz: int) -> bool:
+def set_custom_search_range(
+    mgr: SerialManager, index: int, lower_hz: int, upper_hz: int
+) -> bool:
     """
     CSP,[INDEX],[LIMIT_L],[LIMIT_H] — Set the lower/upper frequency limits
     for one custom search range.
@@ -856,34 +975,42 @@ def get_all_custom_search_ranges(mgr: SerialManager) -> list[dict]:
     if not _enter_program_mode(mgr):
         return results
 
-    groups_resp  = _send_and_receive(mgr, "CSG", timeout=BULK_CIN_TIMEOUT)
+    groups_resp = _send_and_receive(mgr, "CSG", timeout=BULK_CIN_TIMEOUT)
     groups_parts = _parse(groups_resp)
     enabled_flags = [False] * 10
     if groups_parts and len(groups_parts[0]) == 10:
         enabled_flags = [d == "0" for d in groups_parts[0]]
 
     for i in range(1, 11):
-        resp  = _send_and_receive(mgr, f"CSP,{i}", timeout=BULK_CIN_TIMEOUT)
+        resp = _send_and_receive(mgr, f"CSP,{i}", timeout=BULK_CIN_TIMEOUT)
         parts = _parse(resp)
         if parts and len(parts) >= 3:
             try:
                 limit_l_wire = int(parts[1].strip())
                 limit_h_wire = int(parts[2].strip())
-                results.append({
-                    "index":     i,
-                    "enabled":   enabled_flags[i - 1],
-                    "lower_hz":  _wire_to_hz(limit_l_wire),
-                    "upper_hz":  _wire_to_hz(limit_h_wire),
-                    "lower_mhz": round(_wire_to_hz(limit_l_wire) / 1_000_000, 4),
-                    "upper_mhz": round(_wire_to_hz(limit_h_wire) / 1_000_000, 4),
-                })
+                results.append(
+                    {
+                        "index": i,
+                        "enabled": enabled_flags[i - 1],
+                        "lower_hz": _wire_to_hz(limit_l_wire),
+                        "upper_hz": _wire_to_hz(limit_h_wire),
+                        "lower_mhz": round(_wire_to_hz(limit_l_wire) / 1_000_000, 4),
+                        "upper_mhz": round(_wire_to_hz(limit_h_wire) / 1_000_000, 4),
+                    }
+                )
                 continue
-            except (ValueError, IndexError):
+            except ValueError, IndexError:
                 pass
-        results.append({
-            "index": i, "enabled": enabled_flags[i - 1],
-            "lower_hz": 0, "upper_hz": 0, "lower_mhz": 0.0, "upper_mhz": 0.0,
-        })
+        results.append(
+            {
+                "index": i,
+                "enabled": enabled_flags[i - 1],
+                "lower_hz": 0,
+                "upper_hz": 0,
+                "lower_mhz": 0.0,
+                "upper_mhz": 0.0,
+            }
+        )
 
     _exit_program_mode(mgr)
     return results
@@ -891,12 +1018,12 @@ def get_all_custom_search_ranges(mgr: SerialManager) -> list[dict]:
 
 def get_search_settings(mgr: SerialManager) -> dict | None:
     """SCO — Get search/close call delay and CTCSS/DCS search settings."""
-    resp  = _send_and_receive(mgr, "SCO")
+    resp = _send_and_receive(mgr, "SCO")
     parts = _parse(resp)
     if not parts or len(parts) < 2:
         return None
     return {
-        "delay":     parts[0].strip(),
+        "delay": parts[0].strip(),
         "code_search": parts[1].strip() == "1",
     }
 

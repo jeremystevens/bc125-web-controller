@@ -108,6 +108,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from config import config
+
     port = args.port or config.SCANNER_PORT
 
     success = run_tests(port)

@@ -56,6 +56,7 @@ PRIORITY_MODES = {
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def get_scanner():
     return current_app.scanner
 
@@ -76,11 +77,13 @@ def error(message: str, status: int = 400, details: str | None = None):
 
 def scanner_required(f):
     """Decorator: return 503 if scanner is not connected."""
+
     @wraps(f)
     def wrapper(*args, **kwargs):
         if not get_scanner().is_connected:
             return error("Scanner is not connected.", status=503)
         return f(*args, **kwargs)
+
     return wrapper
 
 
@@ -88,18 +91,22 @@ def scanner_required(f):
 # Health
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.get("/health")
 def health():
     """GET /api/health — server and scanner connection status."""
-    return success({
-        "server": "online",
-        "scanner_connected": get_scanner().is_connected,
-    })
+    return success(
+        {
+            "server": "online",
+            "scanner_connected": get_scanner().is_connected,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Status
 # ---------------------------------------------------------------------------
+
 
 @scanner_bp.get("/status")
 @scanner_required
@@ -111,6 +118,7 @@ def status():
 # ---------------------------------------------------------------------------
 # Key press
 # ---------------------------------------------------------------------------
+
 
 @scanner_bp.post("/key/<key>")
 @scanner_required
@@ -125,9 +133,9 @@ def press_key(key: str):
         return error(
             f"Key '{key}' failed or is not recognised.",
             details="Valid keys (BC125AT protocol): "
-                    "scan, hold, search, lockout, func, enter, power, "
-                    "up, left, right, 0-9, dot. "
-                    "Note: weather and down are NOT supported by the BC125AT KEY command.",
+            "scan, hold, search, lockout, func, enter, power, "
+            "up, left, right, 0-9, dot. "
+            "Note: weather and down are NOT supported by the BC125AT KEY command.",
         )
     return success(message=f"Key '{key}' sent.")
 
@@ -135,6 +143,7 @@ def press_key(key: str):
 # ---------------------------------------------------------------------------
 # Volume
 # ---------------------------------------------------------------------------
+
 
 @scanner_bp.get("/volume")
 @scanner_required
@@ -159,6 +168,7 @@ def set_volume(level: int):
 # Squelch
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.get("/squelch")
 @scanner_required
 def get_squelch():
@@ -182,6 +192,7 @@ def set_squelch(level: int):
 # Backlight
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.get("/backlight")
 @scanner_required
 def get_backlight():
@@ -190,7 +201,9 @@ def get_backlight():
     if info is None:
         return error("Could not read backlight mode.", status=502)
     mode = info.get("backlight", "")
-    return success({"backlight": mode, "description": BACKLIGHT_MODES.get(mode, "Unknown")})
+    return success(
+        {"backlight": mode, "description": BACKLIGHT_MODES.get(mode, "Unknown")}
+    )
 
 
 @scanner_bp.post("/backlight/<mode>")
@@ -206,7 +219,7 @@ def set_backlight(mode: str):
         return error(
             f"Invalid or failed backlight mode '{mode}'.",
             details="Valid: AO (always on), AF (always off), KY, SQ, KS. "
-                    "Aliases 'on' and 'off' accepted.",
+            "Aliases 'on' and 'off' accepted.",
         )
     return success(message=f"Backlight set to {mode.upper()}.")
 
@@ -215,12 +228,15 @@ def set_backlight(mode: str):
 # Channel
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.get("/channel/<int:ch>")
 @scanner_required
 def get_channel(ch: int):
     """GET /api/channel/<ch> — Fetch info for channel 1-500."""
     if not 1 <= ch <= 500:
-        return error("Channel out of range.", details="BC125AT supports channels 1–500.")
+        return error(
+            "Channel out of range.", details="BC125AT supports channels 1–500."
+        )
     info = get_scanner().get_channel_info(ch)
     if info is None:
         return error(f"Could not retrieve info for channel {ch}.", status=502)
@@ -233,17 +249,19 @@ def get_channel(ch: int):
 def jump_to_channel(ch: int):
     """POST /api/channel/<ch> — Jump to channel 1-500."""
     if not 1 <= ch <= 500:
-        return error("Channel out of range.", details="BC125AT supports channels 1–500.")
+        return error(
+            "Channel out of range.", details="BC125AT supports channels 1–500."
+        )
     ok = get_scanner().jump_to_channel(ch)
     if not ok:
         return error(f"Failed to jump to channel {ch}.")
     return success({"channel": ch}, message=f"Jumped to channel {ch}.")
 
 
-
 # ---------------------------------------------------------------------------
 # Scan groups
 # ---------------------------------------------------------------------------
+
 
 @scanner_bp.get("/groups")
 @scanner_required
@@ -253,12 +271,14 @@ def get_groups():
     if info is None:
         return error("Could not read scan groups.", status=502)
     groups = info.get("groups", [])
-    return success({
-        "groups": [
-            {"group": i + 1, "scanning": enabled}
-            for i, enabled in enumerate(groups)
-        ]
-    })
+    return success(
+        {
+            "groups": [
+                {"group": i + 1, "scanning": enabled}
+                for i, enabled in enumerate(groups)
+            ]
+        }
+    )
 
 
 @scanner_bp.post("/groups")
@@ -283,6 +303,7 @@ def set_groups():
 # ---------------------------------------------------------------------------
 # Priority mode
 # ---------------------------------------------------------------------------
+
 
 @scanner_bp.get("/priority")
 @scanner_required
@@ -314,6 +335,7 @@ def set_priority(mode: str):
 # Scan / Hold
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.post("/scan")
 @scanner_required
 def start_scan():
@@ -338,6 +360,7 @@ def hold():
 # Power
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.post("/power/off")
 @scanner_required
 def power_off():
@@ -348,10 +371,10 @@ def power_off():
     return success(message="Scanner powered off.")
 
 
-
 # ---------------------------------------------------------------------------
 # .bc125at_ss Export / Import  (Native Uniden format)
 # ---------------------------------------------------------------------------
+
 
 def _parse_bc125at_ss(text: str) -> list[dict]:
     """
@@ -379,13 +402,13 @@ def _parse_bc125at_ss(text: str) -> list[dict]:
             continue
 
         try:
-            ch_num   = int(parts[1].strip())
-            name     = parts[2].strip()[:16]
-            freq_hz  = int(parts[3].strip())
-            mod      = parts[4].strip().upper()
-            ctcss    = parts[5].strip()
-            locked   = parts[6].strip()
-            delay    = parts[7].strip()
+            ch_num = int(parts[1].strip())
+            name = parts[2].strip()[:16]
+            freq_hz = int(parts[3].strip())
+            mod = parts[4].strip().upper()
+            ctcss = parts[5].strip()
+            locked = parts[6].strip()
+            delay = parts[7].strip()
             priority = parts[8].strip()
 
             # Normalise modulation
@@ -398,17 +421,19 @@ def _parse_bc125at_ss(text: str) -> list[dict]:
             if ctcss.upper() == "OFF":
                 ctcss = "0"
 
-            channels.append({
-                "channel":    ch_num,
-                "name":       name,
-                "frequency_hz": freq_hz,
-                "modulation": mod,
-                "ctcss_dcs":  ctcss,
-                "delay":      delay if delay else "2",
-                "locked_out": locked.upper() == "ON",
-                "priority":   priority.upper() == "ON",
-            })
-        except (ValueError, IndexError):
+            channels.append(
+                {
+                    "channel": ch_num,
+                    "name": name,
+                    "frequency_hz": freq_hz,
+                    "modulation": mod,
+                    "ctcss_dcs": ctcss,
+                    "delay": delay if delay else "2",
+                    "locked_out": locked.upper() == "ON",
+                    "priority": priority.upper() == "ON",
+                }
+            )
+        except ValueError, IndexError:
             continue
 
     return channels
@@ -425,7 +450,7 @@ def _build_bc125at_ss(channels: list[dict]) -> str:
     # Group channels into banks of 50
     for bank in range(1, 11):
         start = (bank - 1) * 50 + 1
-        end   = bank * 50
+        end = bank * 50
         bank_channels = [c for c in channels if start <= c["channel"] <= end]
         if not bank_channels:
             continue
@@ -433,12 +458,12 @@ def _build_bc125at_ss(channels: list[dict]) -> str:
         lines.append(f"Conventional	{bank}	Bank {bank}	Off")
 
         for ch in bank_channels:
-            freq_hz  = ch.get("frequency_hz", 0)
-            name     = ch.get("name", "")
-            mod      = ch.get("modulation", "FM")
-            ctcss    = ch.get("ctcss_dcs", "0")
-            delay    = ch.get("delay", "2")
-            locked   = "On" if ch.get("locked_out") else "Off"
+            freq_hz = ch.get("frequency_hz", 0)
+            name = ch.get("name", "")
+            mod = ch.get("modulation", "FM")
+            ctcss = ch.get("ctcss_dcs", "0")
+            delay = ch.get("delay", "2")
+            locked = "On" if ch.get("locked_out") else "Off"
             priority = "On" if ch.get("priority") else "Off"
 
             # Convert "0" CTCSS back to "Off"
@@ -463,9 +488,9 @@ def export_channels_ss():
     """
     from flask import Response
 
-    scanner      = get_scanner()
+    scanner = get_scanner()
     all_channels = scanner.get_all_channels_bulk()
-    ss_content   = _build_bc125at_ss(all_channels)
+    ss_content = _build_bc125at_ss(all_channels)
 
     return Response(
         ss_content,
@@ -473,7 +498,7 @@ def export_channels_ss():
         headers={
             "Content-Disposition": "attachment; filename=bc125at_channels.bc125at_ss",
             "Content-Type": "application/octet-stream",
-        }
+        },
     )
 
 
@@ -501,34 +526,38 @@ def import_channels_ss():
     if not channels:
         return error(
             "No channel data found in file.",
-            details="File must contain C-Freq lines in .bc125at_ss format."
+            details="File must contain C-Freq lines in .bc125at_ss format.",
         )
 
-    scanner    = get_scanner()
+    scanner = get_scanner()
     pre_errors = []
-    to_write   = []
+    to_write = []
 
     for ch in channels:
-        ch_num  = ch["channel"]
+        ch_num = ch["channel"]
         freq_hz = ch["frequency_hz"]
 
         if not 1 <= ch_num <= 500:
             pre_errors.append(f"CH {ch_num}: out of range — skipped")
             continue
         if freq_hz != 0 and not (25_000_000 <= freq_hz <= 512_000_000):
-            pre_errors.append(f"CH {ch_num}: frequency {freq_hz} Hz out of range — skipped")
+            pre_errors.append(
+                f"CH {ch_num}: frequency {freq_hz} Hz out of range — skipped"
+            )
             continue
 
-        to_write.append({
-            "channel":    ch_num,
-            "name":       ch["name"],
-            "freq_hz":    freq_hz,
-            "modulation": ch["modulation"],
-            "ctcss_dcs":  ch["ctcss_dcs"],
-            "delay":      ch["delay"],
-            "locked_out": ch["locked_out"],
-            "priority":   ch["priority"],
-        })
+        to_write.append(
+            {
+                "channel": ch_num,
+                "name": ch["name"],
+                "freq_hz": freq_hz,
+                "modulation": ch["modulation"],
+                "ctcss_dcs": ch["ctcss_dcs"],
+                "delay": ch["delay"],
+                "locked_out": ch["locked_out"],
+                "priority": ch["priority"],
+            }
+        )
 
     written, skipped, write_errors = scanner.set_channels_bulk(to_write)
     all_errors = pre_errors + write_errors
@@ -537,15 +566,17 @@ def import_channels_ss():
         {
             "written": written,
             "skipped": skipped + len(pre_errors),
-            "errors":  all_errors[:20],
-            "total":   written + skipped + len(pre_errors),
+            "errors": all_errors[:20],
+            "total": written + skipped + len(pre_errors),
         },
         message=f"Import complete — {written} channels written, {skipped + len(pre_errors)} skipped.",
     )
 
+
 # ---------------------------------------------------------------------------
 # Error handlers
 # ---------------------------------------------------------------------------
+
 
 @scanner_bp.errorhandler(404)
 def not_found(e):
@@ -567,6 +598,7 @@ def internal_error(e):
 # Recording  (Phase 5)
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.get("/recording/status")
 def recording_status():
     """GET /api/recording/status — current recorder state."""
@@ -580,15 +612,23 @@ def recording_start():
     POST /api/recording/start — begin recording from default audio input.
     Captures the current scanner frequency and channel from state.
     """
-    scanner  = get_scanner()
-    state    = scanner.state if scanner.is_connected else {}
-    result   = current_app.recorder.start(
-        channel_id    = state.get("channel_id", 0),
-        frequency_mhz = state.get("frequency_mhz", 0.0),
+    scanner = get_scanner()
+    state = scanner.state if scanner.is_connected else {}
+    result = current_app.recorder.start(
+        channel_id=state.get("channel_id", 0),
+        frequency_mhz=state.get("frequency_mhz", 0.0),
     )
     status_code = 200 if result["success"] else 409
-    return jsonify({"success": result["success"], "message": result["message"],
-                    "data": {"file": result.get("file")}}), status_code
+    return (
+        jsonify(
+            {
+                "success": result["success"],
+                "message": result["message"],
+                "data": {"file": result.get("file")},
+            }
+        ),
+        status_code,
+    )
 
 
 @scanner_bp.post("/recording/stop")
@@ -597,8 +637,16 @@ def recording_stop():
     """POST /api/recording/stop — stop recording (tail runs before save)."""
     result = current_app.recorder.stop()
     status_code = 200 if result["success"] else 409
-    return jsonify({"success": result["success"], "message": result["message"],
-                    "data": {"file": result.get("file")}}), status_code
+    return (
+        jsonify(
+            {
+                "success": result["success"],
+                "message": result["message"],
+                "data": {"file": result.get("file")},
+            }
+        ),
+        status_code,
+    )
 
 
 @scanner_bp.get("/recordings")
@@ -620,6 +668,7 @@ def delete_recording(filename: str):
 # Channel Manager  (Phase 6)
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.get("/channels")
 @scanner_required
 def get_channels():
@@ -630,18 +679,20 @@ def get_channels():
     """
     try:
         bank = int(request.args.get("bank", 1))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         bank = 1
-    bank  = max(1, min(10, bank))
+    bank = max(1, min(10, bank))
     start = (bank - 1) * 50 + 1
-    end   = bank * 50
+    end = bank * 50
     channels = get_scanner().get_channels_bulk(start, end)
-    return success({
-        "bank":     bank,
-        "start":    start,
-        "end":      end,
-        "channels": channels,
-    })
+    return success(
+        {
+            "bank": bank,
+            "start": start,
+            "end": end,
+            "channels": channels,
+        }
+    )
 
 
 @scanner_bp.put("/channel/<int:ch>")
@@ -653,21 +704,23 @@ def update_channel(ch: int):
     Body: { name, frequency_hz, modulation, ctcss_dcs, delay, locked_out, priority }
     """
     if not 1 <= ch <= 500:
-        return error("Channel out of range.", details="BC125AT supports channels 1–500.")
+        return error(
+            "Channel out of range.", details="BC125AT supports channels 1–500."
+        )
 
     body = request.get_json(silent=True)
     if not body:
         return error("Request body must be JSON.")
 
     ok = get_scanner().set_channel(
-        channel    = ch,
-        name       = body.get("name", ""),
-        freq_hz    = int(body.get("frequency_hz", 0)),
-        modulation = body.get("modulation", "FM"),
-        ctcss_dcs  = str(body.get("ctcss_dcs", "0")),
-        delay      = str(body.get("delay", "2")),
-        locked_out = bool(body.get("locked_out", False)),
-        priority   = bool(body.get("priority", False)),
+        channel=ch,
+        name=body.get("name", ""),
+        freq_hz=int(body.get("frequency_hz", 0)),
+        modulation=body.get("modulation", "FM"),
+        ctcss_dcs=str(body.get("ctcss_dcs", "0")),
+        delay=str(body.get("delay", "2")),
+        locked_out=bool(body.get("locked_out", False)),
+        priority=bool(body.get("priority", False)),
     )
     if not ok:
         return error(f"Failed to write channel {ch}.")
@@ -678,6 +731,7 @@ def update_channel(ch: int):
 # Settings  (Phase 6)
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.get("/settings")
 def get_settings():
     """
@@ -685,17 +739,18 @@ def get_settings():
     Does not require scanner connection for most fields.
     """
     from config import config as cfg
-    scanner  = get_scanner()
+
+    scanner = get_scanner()
 
     settings = {
         "serial": {
-            "port":          cfg.SCANNER_PORT,
-            "baud":          cfg.SCANNER_BAUD,
+            "port": cfg.SCANNER_PORT,
+            "baud": cfg.SCANNER_BAUD,
             "poll_interval": cfg.SCANNER_POLL_INTERVAL,
         },
         "recording": {
-            "directory":     cfg.RECORDINGS_DIR,
-            "tail_seconds":  current_app.recorder.status()["tail_seconds"],
+            "directory": cfg.RECORDINGS_DIR,
+            "tail_seconds": current_app.recorder.status()["tail_seconds"],
         },
         "flask": {
             "host": cfg.FLASK_HOST,
@@ -705,10 +760,10 @@ def get_settings():
 
     # Live scanner settings (only if connected)
     if scanner.is_connected:
-        groups   = scanner.get_scan_groups()
+        groups = scanner.get_scan_groups()
         priority = scanner.get_priority_mode()
-        settings["scan_groups"]    = groups.get("groups") if groups else None
-        settings["priority_mode"]  = priority.get("priority_mode") if priority else None
+        settings["scan_groups"] = groups.get("groups") if groups else None
+        settings["priority_mode"] = priority.get("priority_mode") if priority else None
 
     return success(settings)
 
@@ -740,8 +795,10 @@ def settings_set_priority():
         return error("Body must be JSON with 'mode' key.")
     ok = get_scanner().set_priority_mode(str(body["mode"]))
     if not ok:
-        return error("Failed to set priority mode.",
-                     details="Valid modes: 0=Off, 1=On, 2=Plus, 3=DND.")
+        return error(
+            "Failed to set priority mode.",
+            details="Valid modes: 0=Off, 1=On, 2=Plus, 3=DND.",
+        )
     return success(message=f"Priority mode set to {body['mode']}.")
 
 
@@ -769,7 +826,7 @@ def settings_set_serial():
         else:
             env_path.write_text("")
 
-    lines   = env_path.read_text().splitlines()
+    lines = env_path.read_text().splitlines()
     updates = {}
     if "port" in body:
         updates["SCANNER_PORT"] = body["port"]
@@ -777,7 +834,7 @@ def settings_set_serial():
         try:
             val = float(body["poll_interval"])
             updates["SCANNER_POLL_INTERVAL"] = str(round(max(0.2, min(5.0, val)), 1))
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return error("poll_interval must be a number between 0.2 and 5.0.")
 
     # Update or append each key
@@ -802,6 +859,7 @@ def settings_set_serial():
 # CSV Export / Import  (Phase 7)
 # ---------------------------------------------------------------------------
 
+
 @scanner_bp.get("/channels/export")
 @admin_required
 @scanner_required
@@ -816,26 +874,36 @@ def export_channels():
     import io
     from flask import Response
 
-    scanner  = get_scanner()
+    scanner = get_scanner()
     channels = scanner.get_all_channels_bulk()
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "channel", "name", "frequency_mhz", "modulation",
-        "ctcss_dcs", "delay", "locked_out", "priority"
-    ])
+    writer.writerow(
+        [
+            "channel",
+            "name",
+            "frequency_mhz",
+            "modulation",
+            "ctcss_dcs",
+            "delay",
+            "locked_out",
+            "priority",
+        ]
+    )
     for ch in channels:
-        writer.writerow([
-            ch["channel"],
-            ch["name"],
-            ch["frequency_mhz"] if ch["frequency_mhz"] > 0 else "",
-            ch["modulation"],
-            ch["ctcss_dcs"],
-            ch["delay"],
-            str(ch["locked_out"]).lower(),
-            str(ch["priority"]).lower(),
-        ])
+        writer.writerow(
+            [
+                ch["channel"],
+                ch["name"],
+                ch["frequency_mhz"] if ch["frequency_mhz"] > 0 else "",
+                ch["modulation"],
+                ch["ctcss_dcs"],
+                ch["delay"],
+                str(ch["locked_out"]).lower(),
+                str(ch["priority"]).lower(),
+            ]
+        )
 
     output.seek(0)
     return Response(
@@ -844,7 +912,7 @@ def export_channels():
         headers={
             "Content-Disposition": "attachment; filename=bc125at_channels.csv",
             "Content-Type": "text/csv; charset=utf-8",
-        }
+        },
     )
 
 
@@ -866,18 +934,21 @@ def import_channels():
     import io
 
     if "file" not in request.files:
-        return error("No file uploaded.", details="Send a multipart/form-data request with a 'file' field.")
+        return error(
+            "No file uploaded.",
+            details="Send a multipart/form-data request with a 'file' field.",
+        )
 
     f = request.files["file"]
     if not f.filename or not f.filename.lower().endswith(".csv"):
         return error("Invalid file.", details="File must be a .csv file.")
 
     try:
-        content = f.read().decode("utf-8-sig")   # utf-8-sig strips BOM if present
+        content = f.read().decode("utf-8-sig")  # utf-8-sig strips BOM if present
     except UnicodeDecodeError:
         return error("Could not read file.", details="File must be UTF-8 encoded.")
 
-    reader   = csv.DictReader(io.StringIO(content))
+    reader = csv.DictReader(io.StringIO(content))
     required = {"channel", "name", "frequency_mhz", "modulation"}
 
     # Validate headers
@@ -890,13 +961,13 @@ def import_channels():
         return error(
             "CSV is missing required columns.",
             details=f"Missing: {', '.join(sorted(missing))}. "
-                    f"Required: channel, name, frequency_mhz, modulation, "
-                    f"ctcss_dcs, delay, locked_out, priority",
+            f"Required: channel, name, frequency_mhz, modulation, "
+            f"ctcss_dcs, delay, locked_out, priority",
         )
 
     VALID_MODS = {"AM", "FM", "NFM", "WFM", "FMB"}
-    scanner    = get_scanner()
-    to_write   = []
+    scanner = get_scanner()
+    to_write = []
     pre_errors = []
 
     # Validate and build list first — then write in bulk
@@ -908,28 +979,34 @@ def import_channels():
                 continue
 
             freq_str = row.get("frequency_mhz", "").strip()
-            freq_hz  = 0
+            freq_hz = 0
             if freq_str:
                 freq_mhz = float(freq_str)
-                freq_hz  = int(freq_mhz * 1_000_000)
+                freq_hz = int(freq_mhz * 1_000_000)
                 if freq_hz != 0 and not (25_000_000 <= freq_hz <= 512_000_000):
-                    pre_errors.append(f"Row {i}: frequency {freq_mhz} MHz out of range — skipped")
+                    pre_errors.append(
+                        f"Row {i}: frequency {freq_mhz} MHz out of range — skipped"
+                    )
                     continue
 
             mod = row.get("modulation", "FM").strip().upper()
             if mod not in VALID_MODS:
                 mod = "FM"
 
-            to_write.append({
-                "channel":    ch_num,
-                "name":       row.get("name", "").strip()[:16],
-                "freq_hz":    freq_hz,
-                "modulation": mod,
-                "ctcss_dcs":  row.get("ctcss_dcs", "0").strip() or "0",
-                "delay":      row.get("delay", "2").strip() or "2",
-                "locked_out": row.get("locked_out", "false").strip().lower() in ("true", "1", "yes"),
-                "priority":   row.get("priority", "false").strip().lower() in ("true", "1", "yes"),
-            })
+            to_write.append(
+                {
+                    "channel": ch_num,
+                    "name": row.get("name", "").strip()[:16],
+                    "freq_hz": freq_hz,
+                    "modulation": mod,
+                    "ctcss_dcs": row.get("ctcss_dcs", "0").strip() or "0",
+                    "delay": row.get("delay", "2").strip() or "2",
+                    "locked_out": row.get("locked_out", "false").strip().lower()
+                    in ("true", "1", "yes"),
+                    "priority": row.get("priority", "false").strip().lower()
+                    in ("true", "1", "yes"),
+                }
+            )
         except (ValueError, KeyError) as exc:
             pre_errors.append(f"Row {i}: parse error — {exc}")
 
@@ -941,8 +1018,8 @@ def import_channels():
         {
             "written": written,
             "skipped": skipped + len(pre_errors),
-            "errors":  all_errors[:20],
-            "total":   written + skipped + len(pre_errors),
+            "errors": all_errors[:20],
+            "total": written + skipped + len(pre_errors),
         },
         message=f"Import complete — {written} channels written, {skipped + len(pre_errors)} skipped.",
     )
@@ -951,6 +1028,7 @@ def import_channels():
 # ---------------------------------------------------------------------------
 # Lockout Manager  (bulk unlock)
 # ---------------------------------------------------------------------------
+
 
 @scanner_bp.post("/channels/bulk-unlock")
 @admin_required
@@ -978,23 +1056,25 @@ def bulk_unlock_channels():
     for ch_num in channel_nums:
         try:
             ch_num = int(ch_num)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             continue
         if not 1 <= ch_num <= 500:
             continue
 
         info = scanner.get_channel_info(ch_num)
         if info:
-            to_write.append({
-                "channel":    ch_num,
-                "name":       info.get("name", ""),
-                "freq_hz":    info.get("frequency_hz", 0),
-                "modulation": info.get("modulation", "FM"),
-                "ctcss_dcs":  info.get("ctcss_dcs", "0"),
-                "delay":      info.get("delay", "2"),
-                "locked_out": False,
-                "priority":   info.get("priority", False),
-            })
+            to_write.append(
+                {
+                    "channel": ch_num,
+                    "name": info.get("name", ""),
+                    "freq_hz": info.get("frequency_hz", 0),
+                    "modulation": info.get("modulation", "FM"),
+                    "ctcss_dcs": info.get("ctcss_dcs", "0"),
+                    "delay": info.get("delay", "2"),
+                    "locked_out": False,
+                    "priority": info.get("priority", False),
+                }
+            )
 
     if not to_write:
         return error("No valid channels to unlock.")
@@ -1005,15 +1085,17 @@ def bulk_unlock_channels():
         {
             "written": written,
             "skipped": skipped,
-            "errors":  errors[:20],
+            "errors": errors[:20],
         },
-        message=f"Unlocked {written} channel(s)" + (f", {skipped} failed" if skipped else ""),
+        message=f"Unlocked {written} channel(s)"
+        + (f", {skipped} failed" if skipped else ""),
     )
 
 
 # ---------------------------------------------------------------------------
 # Scanner Status Page
 # ---------------------------------------------------------------------------
+
 
 @scanner_bp.get("/status/full")
 def get_full_status():
@@ -1031,7 +1113,7 @@ def get_full_status():
     from config import config as cfg
 
     scanner = get_scanner()
-    state   = scanner.state
+    state = scanner.state
 
     # Uptime calculation
     uptime_seconds = None
@@ -1039,7 +1121,7 @@ def get_full_status():
         try:
             connected_at = datetime.fromisoformat(state["connected_at"])
             uptime_seconds = (datetime.now() - connected_at).total_seconds()
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
 
     # Recordings folder stats
@@ -1056,30 +1138,33 @@ def get_full_status():
     BYTES_PER_SECOND = 44100 * 2  # sample_rate * bytes_per_sample (mono)
     rec_total_seconds = rec_total_bytes / BYTES_PER_SECOND if rec_total_bytes else 0
 
-    return success({
-        "scanner": {
-            "connected":      scanner.is_connected,
-            "model":          state.get("model", ""),
-            "firmware":       state.get("firmware", ""),
-            "port":           cfg.SCANNER_PORT,
-            "baud":           cfg.SCANNER_BAUD,
-            "poll_interval":  cfg.SCANNER_POLL_INTERVAL,
-            "connected_at":   state.get("connected_at"),
-            "uptime_seconds": uptime_seconds,
-            "battery_volts":  state.get("battery_volts", 0.0),
-        },
-        "recordings": {
-            "count":          rec_count,
-            "total_bytes":    rec_total_bytes,
-            "total_mb":       round(rec_total_bytes / (1024 * 1024), 2),
-            "total_seconds":  round(rec_total_seconds, 1),
-        },
-    })
+    return success(
+        {
+            "scanner": {
+                "connected": scanner.is_connected,
+                "model": state.get("model", ""),
+                "firmware": state.get("firmware", ""),
+                "port": cfg.SCANNER_PORT,
+                "baud": cfg.SCANNER_BAUD,
+                "poll_interval": cfg.SCANNER_POLL_INTERVAL,
+                "connected_at": state.get("connected_at"),
+                "uptime_seconds": uptime_seconds,
+                "battery_volts": state.get("battery_volts", 0.0),
+            },
+            "recordings": {
+                "count": rec_count,
+                "total_bytes": rec_total_bytes,
+                "total_mb": round(rec_total_bytes / (1024 * 1024), 2),
+                "total_seconds": round(rec_total_seconds, 1),
+            },
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Custom Search Ranges
 # ---------------------------------------------------------------------------
+
 
 @scanner_bp.get("/search/ranges")
 @scanner_required
@@ -1112,7 +1197,7 @@ def update_search_range(index: int):
     try:
         lower_mhz = float(body.get("lower_mhz"))
         upper_mhz = float(body.get("upper_mhz"))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return error("lower_mhz and upper_mhz must be numbers.")
 
     if lower_mhz >= upper_mhz:
@@ -1127,7 +1212,9 @@ def update_search_range(index: int):
     ok = get_scanner().set_custom_search_range(index, lower_hz, upper_hz)
     if not ok:
         return error(f"Failed to set search range {index}.")
-    return success(message=f"Search range {index} updated: {lower_mhz}–{upper_mhz} MHz.")
+    return success(
+        message=f"Search range {index} updated: {lower_mhz}–{upper_mhz} MHz."
+    )
 
 
 @scanner_bp.post("/search/groups")
@@ -1176,7 +1263,7 @@ def set_search_settings_route():
     if not body:
         return error("Body must be JSON.")
 
-    delay       = str(body.get("delay", "2"))
+    delay = str(body.get("delay", "2"))
     code_search = bool(body.get("code_search", False))
 
     ok = get_scanner().set_search_settings(delay, code_search)
@@ -1188,6 +1275,7 @@ def set_search_settings_route():
 # ---------------------------------------------------------------------------
 # Session Recording
 # ---------------------------------------------------------------------------
+
 
 def get_session_recorder():
     return current_app.session_recorder
@@ -1225,30 +1313,35 @@ def recordings_index():
     from datetime import datetime
     from config import config as cfg
 
-    rec_dir  = Path(cfg.RECORDINGS_DIR)
+    rec_dir = Path(cfg.RECORDINGS_DIR)
     listings = []
 
     for wav in sorted(rec_dir.glob("*.wav"), reverse=True):
         sidecar = wav.with_suffix(".json")
-        meta    = {}
+        meta = {}
         if sidecar.exists():
             try:
                 import json
+
                 meta = json.loads(sidecar.read_text())
             except Exception:
                 pass
 
         stat = wav.stat()
-        listings.append({
-            "filename":      wav.name,
-            "size_kb":       round(stat.st_size / 1024, 1),
-            "created":       datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-            "url":           f"/recordings/{wav.name}",
-            "has_meta":      bool(meta),
-            "frequency_mhz": meta.get("frequency_mhz", 0),
-            "channel_name":  meta.get("channel_name", ""),
-            "modulation":    meta.get("modulation", ""),
-            "duration_s":    meta.get("duration_s", 0),
-        })
+        listings.append(
+            {
+                "filename": wav.name,
+                "size_kb": round(stat.st_size / 1024, 1),
+                "created": datetime.fromtimestamp(stat.st_mtime).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "url": f"/recordings/{wav.name}",
+                "has_meta": bool(meta),
+                "frequency_mhz": meta.get("frequency_mhz", 0),
+                "channel_name": meta.get("channel_name", ""),
+                "modulation": meta.get("modulation", ""),
+                "duration_s": meta.get("duration_s", 0),
+            }
+        )
 
     return success({"recordings": listings, "count": len(listings)})

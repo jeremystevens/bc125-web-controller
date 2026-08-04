@@ -36,20 +36,20 @@ logger = logging.getLogger(__name__)
 
 # Minimum dwell time before starting a recording (frequency must be
 # stable for this long — same approach as Activity History)
-MIN_DWELL_S    = 0.8
+MIN_DWELL_S = 0.8
 
 # Minimum transmission duration to keep a recording
 MIN_DURATION_S = 0.5
 
 # Frequency match tolerance (MHz) — same as BC125AT minimum step
-FREQ_TOLERANCE = 0.005   # ±5 kHz
+FREQ_TOLERANCE = 0.005  # ±5 kHz
 
 
 def _safe_filename(text: str, max_len: int = 20) -> str:
     """Strip characters that are unsafe in filenames."""
-    safe = re.sub(r'[^\w\s\-]', '', text).strip()
-    safe = re.sub(r'\s+', '-', safe)
-    return safe[:max_len] if safe else ''
+    safe = re.sub(r"[^\w\s\-]", "", text).strip()
+    safe = re.sub(r"\s+", "-", safe)
+    return safe[:max_len] if safe else ""
 
 
 class SessionRecorder:
@@ -62,16 +62,16 @@ class SessionRecorder:
     """
 
     def __init__(self, recorder: Recorder) -> None:
-        self._rec      = recorder
-        self._enabled  = False
-        self._lock     = threading.Lock()
+        self._rec = recorder
+        self._enabled = False
+        self._lock = threading.Lock()
 
         # Frequency stability tracking (same approach as Activity History)
         # Does NOT rely on squelch_open which is unreliable on BC125AT
-        self._dwell_freq:   float | None = None   # freq currently dwelling on
-        self._dwell_start:  float | None = None   # when dwell started
-        self._last_state:   dict  | None = None
-        self._dwell_timer:  threading.Timer | None = None
+        self._dwell_freq: float | None = None  # freq currently dwelling on
+        self._dwell_start: float | None = None  # when dwell started
+        self._last_state: dict | None = None
+        self._dwell_timer: threading.Timer | None = None
 
         self._recordings_dir = Path(config.RECORDINGS_DIR)
 
@@ -85,8 +85,8 @@ class SessionRecorder:
 
     def enable(self) -> None:
         with self._lock:
-            self._enabled     = True
-            self._dwell_freq  = None
+            self._enabled = True
+            self._dwell_freq = None
             self._dwell_start = None
         logger.info("Session recording enabled.")
 
@@ -98,15 +98,15 @@ class SessionRecorder:
                 self._dwell_timer = None
             if self._rec.is_recording:
                 self._rec.stop()
-            self._dwell_freq  = None
+            self._dwell_freq = None
             self._dwell_start = None
         logger.info("Session recording disabled.")
 
     def status(self) -> dict:
         return {
-            "enabled":        self._enabled,
-            "recording":      self._rec.is_recording,
-            "current_file":   self._rec.current_file,
+            "enabled": self._enabled,
+            "recording": self._rec.is_recording,
+            "current_file": self._rec.current_file,
             "elapsed_seconds": self._rec.elapsed_seconds,
         }
 
@@ -124,7 +124,7 @@ class SessionRecorder:
         if freq <= 0:
             return
 
-        start_timer = False   # set outside lock, acted on after lock released
+        start_timer = False  # set outside lock, acted on after lock released
 
         with self._lock:
             freq_changed = (
@@ -144,13 +144,13 @@ class SessionRecorder:
                     self._stop_recording(state, duration)
 
                 # Reset to new frequency — timer will be started below
-                self._dwell_freq  = freq
+                self._dwell_freq = freq
                 self._dwell_start = time.monotonic()
                 start_timer = True
 
             elif self._dwell_freq is None:
                 # First reading ever
-                self._dwell_freq  = freq
+                self._dwell_freq = freq
                 self._dwell_start = time.monotonic()
                 start_timer = True
             # else: same frequency, dwell timer already running
@@ -188,27 +188,27 @@ class SessionRecorder:
 
     def _start_recording(self, state: dict) -> None:
         if self._rec.is_recording:
-            return   # already recording (tail still running from last tx)
+            return  # already recording (tail still running from last tx)
 
-        ch_id  = state.get("channel_id",   0)
-        freq   = state.get("frequency_mhz", 0.0)
-        name   = state.get("channel_name",  "") or ""
-        mod    = state.get("modulation",    "")
+        ch_id = state.get("channel_id", 0)
+        freq = state.get("frequency_mhz", 0.0)
+        name = state.get("channel_name", "") or ""
+        mod = state.get("modulation", "")
 
         # Build rich filename
-        ts       = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         freq_str = f"{freq:.4f}MHz" if freq else "0MHz"
         name_str = _safe_filename(name)
-        parts    = [ts, freq_str]
+        parts = [ts, freq_str]
         if name_str:
             parts.append(name_str)
         base_name = "_".join(parts)
 
         # Override the recorder's default filename by injecting metadata
         result = self._rec.start(
-            channel_id    = ch_id,
-            frequency_mhz = freq,
-            name          = base_name,       # used for filename if recorder supports it
+            channel_id=ch_id,
+            frequency_mhz=freq,
+            name=base_name,  # used for filename if recorder supports it
         )
 
         # Rename the file to our rich format if recorder used its own scheme
@@ -235,11 +235,11 @@ class SessionRecorder:
         if duration < MIN_DURATION_S:
             # Too short — schedule deletion after tail completes
             threading.Timer(
-                TAIL_SECONDS + 0.5,
-                self._delete_short_recording,
-                args=(filename,)
+                TAIL_SECONDS + 0.5, self._delete_short_recording, args=(filename,)
             ).start()
-            logger.debug("Transmission too short (%.2fs) — will delete %s", duration, filename)
+            logger.debug(
+                "Transmission too short (%.2fs) — will delete %s", duration, filename
+            )
             return
 
         # Write sidecar JSON
@@ -247,20 +247,20 @@ class SessionRecorder:
             threading.Timer(
                 TAIL_SECONDS + 0.2,
                 self._write_sidecar,
-                args=(filename, state, duration)
+                args=(filename, state, duration),
             ).start()
 
     def _write_sidecar(self, filename: str, state: dict, duration: float) -> None:
-        base    = Path(filename).stem
+        base = Path(filename).stem
         sidecar = self._recordings_dir / (base + ".json")
-        meta    = {
-            "timestamp":     datetime.now().isoformat(),
+        meta = {
+            "timestamp": datetime.now().isoformat(),
             "frequency_mhz": state.get("frequency_mhz", 0.0),
-            "channel_id":    state.get("channel_id",    0),
-            "channel_name":  state.get("channel_name",  ""),
-            "modulation":    state.get("modulation",    ""),
-            "duration_s":    round(duration, 2),
-            "filename":      filename,
+            "channel_id": state.get("channel_id", 0),
+            "channel_name": state.get("channel_name", ""),
+            "modulation": state.get("modulation", ""),
+            "duration_s": round(duration, 2),
+            "filename": filename,
         }
         try:
             sidecar.write_text(json.dumps(meta, indent=2))

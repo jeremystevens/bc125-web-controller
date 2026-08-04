@@ -14,15 +14,19 @@ import time
 from functools import wraps
 
 from flask import (
-    Blueprint, jsonify, make_response, request,
-    render_template_string, current_app
+    Blueprint,
+    jsonify,
+    make_response,
+    request,
+    render_template_string,
+    current_app,
 )
 from config import config
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-COOKIE_NAME  = "bc125at_admin"
-COOKIE_DAYS  = 7
+COOKIE_NAME = "bc125at_admin"
+COOKIE_DAYS = 7
 COOKIE_MAX_AGE = COOKIE_DAYS * 24 * 3600
 
 
@@ -30,9 +34,10 @@ COOKIE_MAX_AGE = COOKIE_DAYS * 24 * 3600
 # Token helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_token(secret: str) -> str:
     """Generate a signed token: HMAC-SHA256(secret + timestamp)."""
-    ts  = str(int(time.time()))
+    ts = str(int(time.time()))
     sig = hmac.new(secret.encode(), ts.encode(), hashlib.sha256).hexdigest()
     return f"{ts}:{sig}"
 
@@ -42,7 +47,7 @@ def _verify_token(token: str, secret: str, max_age: int = COOKIE_MAX_AGE) -> boo
     try:
         ts_str, sig = token.split(":", 1)
         ts = int(ts_str)
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return False
 
     # Check expiry
@@ -58,11 +63,12 @@ def _verify_token(token: str, secret: str, max_age: int = COOKIE_MAX_AGE) -> boo
 # Public helper — call from request handlers
 # ---------------------------------------------------------------------------
 
+
 def is_admin() -> bool:
     """Return True if the current request has a valid admin cookie."""
     password = config.ADMIN_PASSWORD
     if not password:
-        return True   # auth disabled (no password set)
+        return True  # auth disabled (no password set)
 
     token = request.cookies.get(COOKIE_NAME, "")
     secret = config.SECRET_KEY + password
@@ -71,11 +77,22 @@ def is_admin() -> bool:
 
 def admin_required(f):
     """Decorator for API routes that require admin login."""
+
     @wraps(f)
     def decorated(*args, **kwargs):
         if not is_admin():
-            return jsonify({"success": False, "message": "Authentication required.", "auth_required": True}), 401
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Authentication required.",
+                        "auth_required": True,
+                    }
+                ),
+                401,
+            )
         return f(*args, **kwargs)
+
     return decorated
 
 
@@ -202,9 +219,9 @@ def login_page():
 
 @auth_bp.post("/login")
 def login_submit():
-    password  = request.form.get("password", "")
-    next_url  = request.form.get("next", "/")
-    expected  = config.ADMIN_PASSWORD
+    password = request.form.get("password", "")
+    next_url = request.form.get("next", "/")
+    expected = config.ADMIN_PASSWORD
 
     if not expected:
         # No password configured — auto-login
@@ -212,23 +229,29 @@ def login_submit():
         return resp
 
     if password != expected:
-        return render_template_string(LOGIN_HTML, error="Incorrect password.", next=next_url)
+        return render_template_string(
+            LOGIN_HTML, error="Incorrect password.", next=next_url
+        )
 
     # Set 7-day signed cookie
     secret = config.SECRET_KEY + expected
-    token  = _make_token(secret)
+    token = _make_token(secret)
 
     resp = make_response(
-        render_template_string("""
+        render_template_string(
+            """
         <script>window.location = {{ next|tojson }};</script>
-        """, next=next_url)
+        """,
+            next=next_url,
+        )
     )
     resp.set_cookie(
-        COOKIE_NAME, token,
+        COOKIE_NAME,
+        token,
         max_age=COOKIE_MAX_AGE,
         httponly=True,
         samesite="Lax",
-        secure=False,   # set True if serving over HTTPS
+        secure=False,  # set True if serving over HTTPS
     )
     return resp
 
@@ -243,4 +266,6 @@ def logout():
 @auth_bp.get("/status")
 def auth_status():
     """GET /auth/status — returns whether the current request is authenticated."""
-    return jsonify({"authenticated": is_admin(), "auth_enabled": bool(config.ADMIN_PASSWORD)})
+    return jsonify(
+        {"authenticated": is_admin(), "auth_enabled": bool(config.ADMIN_PASSWORD)}
+    )
