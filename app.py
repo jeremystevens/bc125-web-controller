@@ -20,6 +20,7 @@ from config import config
 from scanner import Scanner
 from recorder import Recorder
 from recorder.session_recorder import SessionRecorder
+from storage import TransmissionTracker, init_db, index_recordings
 from auth import auth_bp, is_admin, admin_required
 from api import register_api
 from api.socket import socketio
@@ -30,6 +31,10 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+# ── Storage ────────────────────────────────────────────────────────────────
+init_db()
+index_recordings()
 
 # ── Flask app ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -50,8 +55,10 @@ app.scanner = scanner
 # ── Recorder ──────────────────────────────────────────────────────────────
 recorder         = Recorder()
 session_recorder = SessionRecorder(recorder)
+history_tracker  = TransmissionTracker()
 app.recorder         = recorder
 app.session_recorder = session_recorder
+app.history_tracker  = history_tracker
 
 # ── Register API blueprints + SocketIO events ─────────────────────────────
 register_api(app)
@@ -102,8 +109,9 @@ def on_scanner_state(state: dict) -> None:
     state["recorder"]         = recorder.status()
     state["session_recorder"] = session_recorder.status()
     socketio.emit("scanner_state", state)
-    # Feed every state push to the session recorder
+    # Feed every state push to backend automations
     session_recorder.on_state(state)
+    history_tracker.on_state(state)
 
 
 def on_scanner_error(message: str) -> None:

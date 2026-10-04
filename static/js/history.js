@@ -18,6 +18,7 @@
 const History = (() => {
 
   const STORAGE_KEY    = 'bc125at_history';
+  const MIGRATION_KEY  = 'bc125at_history_migrated_sqlite';
   const MAX_ENTRIES    = 500;
   const PAGE_SIZE      = 50;
   const MIN_DWELL_MS   = 800;    // ignore stops shorter than 800ms (scanning blip)
@@ -25,6 +26,7 @@ const History = (() => {
   let entries     = [];
   let filterText  = '';
   let currentPage = 1;
+  let lastRefresh = 0;
 
   // Frequency tracking state
   let dwellFreq   = null;   // frequency currently dwelling on
@@ -33,12 +35,31 @@ const History = (() => {
 
   /* ── Persistence ─────────────────────────────────────────────── */
 
-  function load() {
+  async function migrateLocalStorage() {
     try {
+      if (localStorage.getItem(MIGRATION_KEY) === '1') return;
       const raw = localStorage.getItem(STORAGE_KEY);
-      entries = raw ? JSON.parse(raw) : [];
-      console.log('[History] Loaded', entries.length, 'entries from localStorage');
-    } catch (_) { entries = []; }
+      const oldEntries = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(oldEntries) && oldEntries.length > 0) {
+        await apiFetch('/api/history/import', 'POST', { entries: oldEntries });
+      }
+      localStorage.setItem(MIGRATION_KEY, '1');
+    } catch (_) {}
+  }
+
+  async function load() {
+    await migrateLocalStorage();
+    try {
+      const res = await apiFetch('/api/history?limit=1000');
+      entries = res.success ? (res.data.entries || []) : [];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+      console.log('[History] Loaded', entries.length, 'entries from SQLite backend');
+    } catch (_) {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        entries = raw ? JSON.parse(raw) : [];
+      } catch (_) { entries = []; }
+    }
   }
 
   /* Match recording files to history entries by timestamp proximity */
@@ -71,12 +92,8 @@ const History = (() => {
   }
 
   function save() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-    } catch (_) {
-      entries = entries.slice(0, 100);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); } catch (_) {}
-    }
+    // Cache backend history locally for heatmaps/status fallback only.
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); } catch (_) {}
   }
 
   function addEntry(entry) {
@@ -93,54 +110,30 @@ const History = (() => {
   /* ── State tracking ──────────────────────────────────────────── */
 
   function onState(state) {
-    const freq = state.frequency_mhz || 0;
-    if (freq <= 0) return;   // scanner between channels
-
+    // Transmission detection now runs server-side in storage/history_tracker.py
+    // so every browser shares the same SQLite-backed history without duplicates.
+    // Refresh lightly so the badge/history/heatmap catch up while the app is open.
     const now = Date.now();
-
-    // First reading
-    if (dwellFreq === null) {
-      dwellFreq  = freq;
-      dwellStart = now;
-      dwellState = state;
-      return;
-    }
-
-    // Same frequency — update state snapshot but keep original start time
-    if (Math.abs(freq - dwellFreq) < 0.001) {
-      dwellState = state;
-      return;
-    }
-
-    // Frequency changed — log the previous dwell if long enough
-    const duration = (now - dwellStart) / 1000;
-    if (duration >= MIN_DWELL_MS / 1000) {
-      const entry = {
-        timestamp:   new Date(dwellStart).toISOString(),
-        frequency:   parseFloat(dwellFreq.toFixed(4)),
-        channel:     dwellState.channel_id    || 0,
-        name:        dwellState.channel_name  || '',
-        modulation:  dwellState.modulation    || '',
-        squelch_open: !!dwellState.squelch_open,
-        duration:    parseFloat(duration.toFixed(1)),
-        skipped:     false,
-      };
-      addEntry(entry);
-    }
-
-    // Start tracking new frequency
-    dwellFreq  = freq;
-    dwellStart = now;
-    dwellState = state;
+    if (now - lastRefresh < 15000) return;
+    lastRefresh = now;
+    load().then(() => {
+      updateBadge();
+      renderIfVisible();
+      if (window.MiniHeatmap) MiniHeatmap.render();
+    });
   }
 
   /* Smart Resume marks the last entry as skipped */
-  function markLastSkipped() {
+  async function markLastSkipped() {
     if (entries.length > 0) {
       entries[0].skipped = true;
       save();
       renderIfVisible();
     }
+    try {
+      const freq = entries[0]?.frequency || 0;
+      await apiFetch('/api/history/mark-current-skipped', 'POST', { frequency_mhz: freq });
+    } catch (_) {}
   }
 
   /* ── Render helpers ──────────────────────────────────────────── */
@@ -312,8 +305,11 @@ const History = (() => {
   /* ── Init ────────────────────────────────────────────────────── */
 
   function init() {
-    load();
-    updateBadge();
+    load().then(() => {
+      updateBadge();
+      renderIfVisible();
+      matchRecordings();
+    });
 
     const filterInput = document.getElementById('hist-filter');
     if (filterInput) {
@@ -328,11 +324,17 @@ const History = (() => {
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
         if (!confirm(`Clear all ${entries.length} history entries?`)) return;
-        entries = [];
-        save();
-        render();
-        updateBadge();
-        if (window.logEntry) logEntry('Activity history cleared', 'info');
+        apiFetch('/api/history', 'DELETE').then(res => {
+          if (res.success) {
+            entries = [];
+            save();
+            render();
+            updateBadge();
+            if (window.logEntry) logEntry('Activity history cleared', 'info');
+          } else if (window.logEntry) {
+            logEntry(`History clear failed — ${res.message}`, 'err');
+          }
+        });
       });
     }
 
@@ -348,9 +350,7 @@ const History = (() => {
       render();
     });
 
-    console.log('[History] Initialised — tracking frequency stability (min dwell:', MIN_DWELL_MS, 'ms)');
-    // Match any existing recordings to loaded history entries
-    matchRecordings();
+    console.log('[History] Initialised — using SQLite backend history');
     // Init discovery toggle
     if (window.Discovery) Discovery.init();
   }
@@ -387,7 +387,14 @@ const History = (() => {
     if (window.logEntry) logEntry(`History exported — ${rows.length} entries`, 'ok');
   }
 
-  const History = { init, onState, markLastSkipped, render, matchRecordings,
+  async function refresh() {
+    lastRefresh = Date.now();
+    await load();
+    updateBadge();
+    render();
+  }
+
+  const History = { init, onState, markLastSkipped, render, refresh, matchRecordings,
                    get entries() { return entries; } };
   return History;
 

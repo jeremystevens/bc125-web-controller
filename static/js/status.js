@@ -80,7 +80,16 @@ const Status = (() => {
 
   /* ── Compute stats from Activity History ────────────────────── */
 
-  function getHistoryEntries() {
+  async function getHistoryEntries() {
+    try {
+      const res = await apiFetch('/api/history?limit=5000');
+      if (res.success) {
+        const entries = res.data.entries || [];
+        localStorage.setItem('bc125at_history', JSON.stringify(entries));
+        return entries;
+      }
+    } catch (_) {}
+
     try {
       const raw = localStorage.getItem('bc125at_history');
       return raw ? JSON.parse(raw) : [];
@@ -89,8 +98,8 @@ const Status = (() => {
     }
   }
 
-  function computeStats() {
-    const entries = getHistoryEntries();
+  async function computeStats() {
+    const entries = await getHistoryEntries();
 
     // Session entries — logged since this page's session start
     const sessionEntries = entries.filter(e =>
@@ -205,7 +214,9 @@ const Status = (() => {
   function init() {
     sessionStart = Date.now();
     loadServerStatus();
-    computeStats();
+    computeStats().then(() => {
+      if (window.MiniHeatmap) MiniHeatmap.render();
+    });
     // Uptime ticker starts only after loadServerStatus sets the real
     // sessionStart from connected_at — see startUptimeTicker() call inside it
   }
@@ -213,8 +224,9 @@ const Status = (() => {
   function render() {
     // Called when tab becomes active — refresh everything
     loadServerStatus();
-    computeStats();
-    if (window.Heatmap) Heatmap.render();
+    computeStats().then(() => {
+      if (window.Heatmap) Heatmap.render();
+    });
   }
 
   return { init, render };

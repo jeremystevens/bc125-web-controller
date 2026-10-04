@@ -88,6 +88,8 @@ Built on a **Python + Flask** backend with a **real-time WebSocket** frontend, i
 ◆  Battery voltage monitoring with colour-coded indicator
 ◆  5-bar signal strength display
 ◆  Live activity log with timestamps
+◆  SQLite-backed shared transmission history across browsers
+◆  Server-side recordings index with sidecar metadata support
 ◆  Manual audio recording with 3-second tail capture
 ◆  Settings page — serial port, poll interval, scan groups, priority mode
 ◆  REST API — every feature accessible as a clean JSON endpoint (24+ endpoints)
@@ -240,13 +242,25 @@ All endpoints return a consistent JSON envelope:
 | `POST` | `/api/recording/start` | Begin recording |
 | `POST` | `/api/recording/stop` | Stop recording (tail runs before save) |
 | `GET` | `/api/recordings` | List all saved recordings |
+| `GET` | `/api/recordings/index` | SQLite recording index with sidecar metadata |
+| `POST` | `/api/recordings/reindex` | Rescan recordings folder into SQLite |
 | `DELETE` | `/api/recordings/<filename>` | Delete a recording |
+
+### History
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/history` | List SQLite-backed transmission history |
+| `POST` | `/api/history/import` | One-time browser localStorage migration |
+| `DELETE` | `/api/history` | Clear history |
+| `POST` | `/api/history/mark-current-skipped` | Mark current/recent transmission skipped |
+| `GET` | `/api/history/stats` | Aggregate history statistics |
 
 ### Valid key names
 
 ```
-menu  func  scan  hold  search  weather  lockout  power
-enter  up  down  left  right  0–9  dot  yes  no
+func  scan  hold  search  lockout  power
+enter  up  left  right  0–9  dot
 ```
 
 ---
@@ -272,6 +286,10 @@ bc125-controller/
 │   ├── __init__.py
 │   └── recorder.py            ← Manual recording with tail support
 │
+├── storage/                   ← SQLite persistence package
+│   ├── db.py                  ← History + recordings tables and queries
+│   └── history_tracker.py     ← Server-side transmission detector
+│
 ├── api/                       ← Web layer (decoupled from hardware)
 │   ├── __init__.py
 │   ├── socket.py              ← Shared SocketIO instance
@@ -293,6 +311,7 @@ bc125-controller/
 │       ├── notifications.js   ← Browser notifications · permission · toggle
 │       └── themes.js          ← Theme switcher · 5 radio-inspired themes
 │
+├── data/                      ← SQLite database output (`bc125at.db`)
 ├── recordings/                ← Audio capture output (.wav files)
 └── docs/img/                  ← Screenshots for README
 ```
@@ -302,12 +321,11 @@ bc125-controller/
 ## `> HARDWARE NOTES`
 
 ```
-⚠  Volume and squelch are physical knobs on the BC125AT.
-   They can be READ via serial but NOT set remotely.
-   The API exposes GET endpoints for both but no SET.
+⚠  Volume and squelch can be read and set over serial on the BC125AT.
+   The web UI exposes both as sliders, backed by GET and POST API endpoints.
 
-⚠  Backlight, channel write, scan groups, and priority mode all
-   require the scanner to enter program mode (PRG/EPG).
+⚠  Backlight, channel write, scan groups, priority mode, and custom
+   search range changes require the scanner to enter program mode (PRG/EPG).
    This is handled automatically — you do not need to do anything.
 
 ⚠  Frequencies are transmitted over serial in units of 100 Hz.

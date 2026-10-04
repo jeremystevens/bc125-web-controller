@@ -14,9 +14,11 @@ env/
 # Environment / secrets
 .env
 
-# Recordings
+# Local data / recordings
+data/
 recordings/*.wav
 recordings/*.mp3
+recordings/*.json
 
 # IDE
 .vscode/

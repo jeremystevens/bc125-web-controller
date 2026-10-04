@@ -41,18 +41,18 @@ const Auth = (() => {
     const PROTECTED_SELECTORS = [
       // Channel manager actions
       '#ch-export-btn', '#ch-import-input', '#ch-export-ss-btn', '#ch-import-ss-input',
-      '#ch-unlock-all',
-      // Settings tab — all save buttons
-      '#save-serial', '#save-groups', '#save-priority',
-      '#search-ranges-refresh', '#search-settings-save',
+      '.ch-import-label', '#ch-unlock-all', '#modal-save',
+      '.ch-action-btn.edit', '.ch-action-btn.unlock',
+      // Settings tab — all save buttons / mutating controls
+      '#serial-save', '#groups-save', '.pri-btn',
+      '.sr-range-save', '.sr-range-enabled', '#search-settings-save',
       // Recording controls
-      '#rec-start', '#rec-stop',
+      '#rec-start', '#rec-stop', '.rec-action-btn.delete',
       '#session-rec-toggle',
       // Smart Resume blocklist
       '#sr-toggle', '#sr-block-btn', '#sr-clear-all', '#sr-manage-btn',
       // History
-      '#hist-export', '#hist-clear',
-      '#hist-discovery-toggle',
+      '#hist-clear',
       // Auto-record
       '.session-rec-toggle',
     ].join(', ');

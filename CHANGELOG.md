@@ -7,6 +7,51 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.8.0] — SQLite History and Recordings Index
+
+### Added
+- `storage/` package with SQLite-backed persistence in `data/bc125at.db`.
+- Server-side transmission tracker that records stable scanner dwells directly from scanner state pushes, so history is shared across browsers and does not depend on one browser's `localStorage`.
+- `transmissions` table for frequency, channel, name, modulation, duration, skipped status, discovery flag, and optional recording filename.
+- `recordings` table that indexes WAV files and JSON sidecar metadata from the recordings folder.
+- New API endpoints:
+  - `GET /api/history`
+  - `POST /api/history/import`
+  - `DELETE /api/history`
+  - `POST /api/history/mark-current-skipped`
+  - `GET /api/history/stats`
+  - `POST /api/recordings/reindex`
+- Best-effort one-time migration from existing browser `bc125at_history` localStorage into SQLite.
+
+### Changed
+- History tab now loads from the backend SQLite history API and keeps localStorage only as a cache/fallback for heatmaps.
+- Status page now computes stats from backend history so multiple browsers see the same history base.
+- `/api/recordings/index` now refreshes and returns the SQLite recordings index instead of only scanning ad hoc in the route.
+- Smart Resume skipped marking now notifies the backend tracker so skipped state can persist server-side.
+
+---
+
+## [0.7.30] — Auth and Documentation Fixes
+
+### Fixed
+- Closed auth bypasses on legacy mutating API endpoints:
+  - `POST /api/groups`
+  - `POST /api/priority/<mode>`
+  - `DELETE /api/recordings/<filename>`
+- Restored guest favorite/channel jump behavior by allowing `POST /api/channel/<ch>` without admin auth, matching the documented guest access model.
+- Corrected frontend auth locking selectors so non-admin users see locks on the actual protected controls:
+  - serial save
+  - scan-group save
+  - priority buttons
+  - channel edit/unlock/import/export controls
+  - recording delete/start/stop controls
+  - Smart Resume mutating controls
+- Updated README key list to only show valid BC125AT serial `KEY` commands.
+- Updated README hardware notes for volume/squelch serial set support and custom search range program-mode behavior.
+- Replaced placeholder `VERSION.md` with current version information.
+
+---
+
 ## [0.7.29] — Scanner Audio Streaming
 
 ### Added

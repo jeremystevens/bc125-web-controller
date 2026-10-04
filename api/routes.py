@@ -16,7 +16,6 @@ Endpoints:
     POST /api/backlight/<mode>          — set backlight mode
     GET  /api/channel/<int:ch>          — get channel info (1-500)
     POST /api/channel/<int:ch>          — jump to channel (1-500)
-    POST /api/frequency/<int:freq_hz>   — tune to frequency in Hz
     GET  /api/groups                    — get scan group states
     POST /api/groups                    — set scan group states
     GET  /api/priority                  — get priority mode
@@ -24,6 +23,9 @@ Endpoints:
     POST /api/scan                      — start scanning
     POST /api/hold                      — hold on current channel
     POST /api/power/off                 — power off scanner
+    GET  /api/history                   — SQLite-backed transmission history
+    GET  /api/history/stats             — server-side history statistics
+    GET  /api/recordings/index          — SQLite-backed recordings index
 """
 
 import logging
@@ -117,8 +119,8 @@ def status():
 def press_key(key: str):
     """
     POST /api/key/<key> — Simulate a key press.
-    Valid: menu, func, scan, hold, search, weather, lockout, power,
-           enter, up, down, left, right, 0-9, dot, yes, no
+    Valid BC125AT serial keys: func, scan, hold, search, lockout, power,
+           enter, up, left, right, 0-9, dot
     """
     ok = get_scanner().press_key(key)
     if not ok:
@@ -228,7 +230,6 @@ def get_channel(ch: int):
 
 
 @scanner_bp.post("/channel/<int:ch>")
-@admin_required
 @scanner_required
 def jump_to_channel(ch: int):
     """POST /api/channel/<ch> — Jump to channel 1-500."""
@@ -262,6 +263,7 @@ def get_groups():
 
 
 @scanner_bp.post("/groups")
+@admin_required
 @scanner_required
 def set_groups():
     """
@@ -295,6 +297,7 @@ def get_priority():
 
 
 @scanner_bp.post("/priority/<mode>")
+@admin_required
 @scanner_required
 def set_priority(mode: str):
     """POST /api/priority/<mode> — Set priority. Valid: 0=Off, 1=On, 2=Plus, 3=DND."""
@@ -544,6 +547,81 @@ def import_channels_ss():
     )
 
 # ---------------------------------------------------------------------------
+# SQLite History + Recording Index
+# ---------------------------------------------------------------------------
+
+@scanner_bp.get("/history")
+def history_list():
+    """GET /api/history — server-side transmission history."""
+    from storage import list_transmissions
+
+    try:
+        limit = int(request.args.get("limit", 500))
+        offset = int(request.args.get("offset", 0))
+    except (TypeError, ValueError):
+        limit = 500
+        offset = 0
+    entries = list_transmissions(limit=limit, offset=offset)
+    return success({"entries": entries, "count": len(entries)})
+
+
+@scanner_bp.post("/history/import")
+def history_import():
+    """POST /api/history/import — best-effort migration from browser localStorage."""
+    from storage import import_transmissions
+
+    body = request.get_json(silent=True) or {}
+    entries = body.get("entries", [])
+    if not isinstance(entries, list):
+        return error("Body must contain an 'entries' list.")
+    imported, skipped = import_transmissions(entries[:5000])
+    return success({"imported": imported, "skipped": skipped})
+
+
+@scanner_bp.delete("/history")
+@admin_required
+def history_clear():
+    """DELETE /api/history — clear all stored history."""
+    from storage import clear_transmissions
+
+    deleted = clear_transmissions()
+    return success({"deleted": deleted}, message=f"Cleared {deleted} history entries.")
+
+
+@scanner_bp.post("/history/mark-current-skipped")
+def history_mark_current_skipped():
+    """POST /api/history/mark-current-skipped — mark current/recent transmission skipped."""
+    body = request.get_json(silent=True) or {}
+    freq = body.get("frequency_mhz")
+    try:
+        freq = float(freq) if freq is not None else None
+    except (TypeError, ValueError):
+        freq = None
+
+    tracker = getattr(current_app, "history_tracker", None)
+    marked = tracker.mark_current_skipped(freq) if tracker else False
+    return success({"marked_existing": bool(marked)}, message="Transmission marked skipped.")
+
+
+@scanner_bp.get("/history/stats")
+def history_stats_route():
+    """GET /api/history/stats — aggregate statistics from SQLite history."""
+    from storage import history_stats
+
+    return success(history_stats())
+
+
+@scanner_bp.post("/recordings/reindex")
+@admin_required
+def recordings_reindex():
+    """POST /api/recordings/reindex — rescan recordings/ into SQLite."""
+    from storage import index_recordings
+
+    recordings = index_recordings()
+    return success({"recordings": recordings, "count": len(recordings)})
+
+
+# ---------------------------------------------------------------------------
 # Error handlers
 # ---------------------------------------------------------------------------
 
@@ -608,11 +686,17 @@ def list_recordings():
 
 
 @scanner_bp.delete("/recordings/<filename>")
+@admin_required
 def delete_recording(filename: str):
     """DELETE /api/recordings/<filename> — delete a recording by filename."""
     result = current_app.recorder.delete_recording(filename)
     if not result["success"]:
         return error(result["message"], status=404)
+    try:
+        from storage import index_recordings
+        index_recordings()
+    except Exception:
+        pass
     return success(message=result["message"])
 
 
@@ -1219,36 +1303,9 @@ def session_recording_disable():
 def recordings_index():
     """
     GET /api/recordings/index
-    Returns all recordings with their sidecar metadata if available.
+    Returns the SQLite recordings index, refreshed from disk on each call.
     """
-    from pathlib import Path
-    from datetime import datetime
-    from config import config as cfg
+    from storage import index_recordings
 
-    rec_dir  = Path(cfg.RECORDINGS_DIR)
-    listings = []
-
-    for wav in sorted(rec_dir.glob("*.wav"), reverse=True):
-        sidecar = wav.with_suffix(".json")
-        meta    = {}
-        if sidecar.exists():
-            try:
-                import json
-                meta = json.loads(sidecar.read_text())
-            except Exception:
-                pass
-
-        stat = wav.stat()
-        listings.append({
-            "filename":      wav.name,
-            "size_kb":       round(stat.st_size / 1024, 1),
-            "created":       datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-            "url":           f"/recordings/{wav.name}",
-            "has_meta":      bool(meta),
-            "frequency_mhz": meta.get("frequency_mhz", 0),
-            "channel_name":  meta.get("channel_name", ""),
-            "modulation":    meta.get("modulation", ""),
-            "duration_s":    meta.get("duration_s", 0),
-        })
-
+    listings = index_recordings()
     return success({"recordings": listings, "count": len(listings)})

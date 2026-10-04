@@ -25,7 +25,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     }
     if (tab === 'history') {
       if (window.History) {
-        History.render();
+        if (History.refresh) History.refresh();
+        else History.render();
         History.matchRecordings();
       }
     }
