@@ -509,9 +509,6 @@
           autocomplete="off"
         >
       </div>
-      <button class="ch-lockout-toggle" id="hist-discovery-toggle" title="Show only discovered frequencies (found in search mode, not in programmed channels)">
-        🔍 Discoveries <span class="ch-lockout-count" id="hist-discovery-count"></span>
-      </button>
     </div>
     <div class="hist-toolbar-right">
       <span class="ch-range-label" id="hist-count"></span>
@@ -527,7 +524,6 @@
     <table class="ch-table hist-table">
       <thead>
         <tr>
-          <th></th>
           <th>Time</th>
           <th>Frequency</th>
           <th>Channel</th>
@@ -538,9 +534,93 @@
         </tr>
       </thead>
       <tbody id="hist-tbody">
-        <tr><td colspan="8" class="ch-empty">No transmissions logged yet</td></tr>
+        <tr><td colspan="7" class="ch-empty">No transmissions logged yet</td></tr>
       </tbody>
     </table>
+  </div>
+
+</div>
+{% endblock %}
+
+{# ── Discoveries tab ── #}
+{% block discoveries %}
+<div class="hist-manager disc-manager">
+
+  <div class="hist-toolbar">
+    <div class="hist-toolbar-left disc-filters" id="disc-filters"></div>
+    <div class="hist-toolbar-right">
+      <div class="ch-search-input-wrap" style="min-width:180px">
+        <span class="ch-search-icon">⌕</span>
+        <input type="text" id="disc-filter-input" class="ch-search-input"
+               placeholder="Filter by frequency…" autocomplete="off">
+      </div>
+      <span class="ch-range-label" id="disc-count"></span>
+    </div>
+  </div>
+
+  <div class="disc-cache-note" id="disc-cache-note" hidden>
+    <span>⚠ <span id="disc-cache-text"></span></span>
+    <button class="key key--nav" id="disc-load-channels"
+            title="Reads all 500 channels — scanning pauses while it runs">Load channel list</button>
+  </div>
+
+  <div class="ch-table-wrap">
+    <table class="ch-table hist-table disc-table">
+      <thead>
+        <tr>
+          <th>Frequency</th>
+          <th>Hits</th>
+          <th>First heard</th>
+          <th>Last heard</th>
+          <th>Mode</th>
+          <th>Heard for</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="disc-tbody">
+        <tr><td colspan="8" class="ch-empty">Loading discoveries…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Program-to-scanner modal -->
+  <div class="modal-overlay" id="disc-modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="disc-modal-title">Program frequency</span>
+        <button class="modal-close" id="disc-modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-row">
+          <label class="modal-label" for="disc-bank">Bank</label>
+          <select id="disc-bank" class="modal-input modal-select"></select>
+        </div>
+        <div class="modal-row">
+          <label class="modal-label" for="disc-slot">Channel</label>
+          <select id="disc-slot" class="modal-input modal-select"></select>
+          <input type="number" id="disc-slot-manual" class="modal-input" min="1" max="500"
+                 placeholder="Channel 1–500" hidden>
+          <span class="modal-hint" id="disc-slot-hint"></span>
+        </div>
+        <div class="modal-row">
+          <label class="modal-label" for="disc-name">Name <span class="modal-hint">(max 16 chars)</span></label>
+          <input type="text" id="disc-name" class="modal-input" maxlength="16" placeholder="Channel name">
+        </div>
+        <div class="modal-row">
+          <label class="modal-label" for="disc-mod">Modulation</label>
+          <select id="disc-mod" class="modal-input modal-select"></select>
+        </div>
+        <div class="modal-row">
+          <label class="modal-label" for="disc-delay">Delay (seconds)</label>
+          <select id="disc-delay" class="modal-input modal-select"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="key" id="disc-modal-cancel">Cancel</button>
+        <button class="key key--action" id="disc-modal-save">Program to scanner</button>
+      </div>
+    </div>
   </div>
 
 </div>

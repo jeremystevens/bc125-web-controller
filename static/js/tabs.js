@@ -30,6 +30,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         History.matchRecordings();
       }
     }
+    if (tab === 'discoveries') {
+      if (window.Discovery) Discovery.refresh().then(() => Discovery.render());
+    }
     if (tab === 'status') {
       if (window.Status) Status.render();
     }

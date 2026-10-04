@@ -7,6 +7,34 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.9.0] — Discovery Inbox
+
+### Added
+- **Discoveries tab**: a frequency inbox for unknown frequencies found in Search mode, replacing the 🔍 filter in the History tab.
+  - Search hits grouped by frequency with hit count, first heard, last heard, latest modulation, total and longest time heard, and a link to the latest recording on that frequency.
+  - Statuses: **New**, **Watch**, **Ignore**, **Block** (adds the frequency to the Smart Resume blocklist) and **Programmed**. Filter chips for Inbox (new + watched), Watching, Programmed, Blocked, Ignored and All, plus a frequency filter.
+  - **Watch** pins a frequency to the top and shows how many hits arrived since you started watching. When the scanner lands on a watched frequency the app logs it and sends a browser notification (if enabled), at most once a minute per frequency.
+  - **Program to scanner**: writes a discovery into a channel from a dialog that suggests the first empty slot (optionally per bank), with name, modulation and delay. The server re-reads the target channel first and refuses to overwrite a programmed channel unless you confirm.
+  - Tab badge with the number of new discoveries.
+- Server-side channel cache (`channel_cache` table) so the inbox can tell which frequencies are already programmed and which slots are empty. Updated on every bank load, channel edit, CSV/.bc125at_ss export and Program; slots touched by an import are dropped until re-read. **Load channel list** reads all 500 channels on demand (scanning pauses while it runs).
+- `discovery_status` table storing your decisions per frequency.
+- New API endpoints:
+  - `GET /api/discoveries`
+  - `POST /api/discoveries/status` (admin)
+  - `POST /api/discoveries/program` (admin)
+  - `POST /api/channels/cache/refresh` (admin)
+- `Notifs.notify(title, body, tag)` for notifications other than the active-transmission alert.
+
+### Fixed
+- **Channel number was never read from the scanner.** The GLG parser took `channel_id` from an always-empty name field, so every transmission was logged with channel 0. The History tab's Channel column was always blank, and Smart Resume always resumed with the Search key, even while scanning channels. The channel number is now read from GLG's channel tag field (1-based; verified against the bearcat library's hardware tests).
+- The History tab's "+ Add" button on discovered frequencies opened the channel editor for channel 0, which the server rejected. It's replaced by Program in the Discoveries tab.
+
+### Changed
+- History tab is a plain log again: the 🔍 column, Discoveries filter and "+ Add" button moved to the Discoveries tab.
+- Discovery detection is server-side. A search hit is a transmission with no channel number and no channel name (history from before this release has channel 0 on every row, so the empty name is what identifies its search hits). Readings outside 25–512 MHz are ignored.
+
+---
+
 ## [0.8.1] — History Fixes and Login Hardening
 
 ### Fixed

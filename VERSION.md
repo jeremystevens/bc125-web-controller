@@ -1,8 +1,8 @@
 # Version
 
-Current release: **0.8.1**
+Current release: **0.9.0**
 
-## 0.8.1 — History Fixes and Login Hardening
+## 0.9.0 — Discovery Inbox
 
 Latest documented release in `CHANGELOG.md`.
 

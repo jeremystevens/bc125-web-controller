@@ -146,21 +146,9 @@ const History = (() => {
   }
 
   function filtered() {
-    // Tag entries as discoveries before filtering (needs allChannels loaded)
-    if (window.Discovery) {
-      Discovery.tagEntries(entries);
-      Discovery.updateBadge(entries);
-    }
-
-    // Apply discovery filter first if active
-    let result = (window.Discovery && Discovery.isActive)
-      ? Discovery.filterEntries(entries)
-      : entries;
-
-    // Then apply text filter
-    if (!filterText) return result;
+    if (!filterText) return entries;
     const q = filterText.toLowerCase();
-    return result.filter(e =>
+    return entries.filter(e =>
       (e.name       || '').toLowerCase().includes(q) ||
       (e.frequency  ? e.frequency.toFixed(4) : '').includes(q) ||
       (e.modulation || '').toLowerCase().includes(q) ||
@@ -203,7 +191,7 @@ const History = (() => {
     }
 
     if (slice.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" class="ch-empty">
+      tbody.innerHTML = `<tr><td colspan="7" class="ch-empty">
         ${filterText ? 'No transmissions match your filter' : 'No transmissions logged yet — start scanning'}
       </td></tr>`;
       updatePagination(pages);
@@ -219,10 +207,8 @@ const History = (() => {
       const dur   = e.duration >= 60
         ? `${Math.floor(e.duration / 60)}m ${(e.duration % 60).toFixed(0)}s`
         : `${e.duration}s`;
-      const isDisc = !!e.is_discovery;
 
-      return `<tr class="${e.skipped ? 'hist-skipped' : ''} ${isDisc ? 'hist-discovery-row' : ''}">
-        <td>${isDisc ? '<span class="hist-disc-badge" title="Discovered in search mode — not in programmed channels">🔍</span>' : ''}</td>
+      return `<tr class="${e.skipped ? 'hist-skipped' : ''}">
         <td class="hist-time">
           <span class="hist-timestr">${timeStr}</span>
           <span class="hist-date">${dateStr}</span>
@@ -242,10 +228,6 @@ const History = (() => {
               ? `<a class="hist-play-btn" href="${e.recording_url}" target="_blank" title="Play recording">🔊</a>`
               : ''
             }
-            ${isDisc
-              ? `<button class="ch-action-btn hist-add-ch" data-freq="${e.frequency}" data-mod="${escHtml(e.modulation || 'FM')}" title="Add to programmed channels" style="font-size:10px;padding:2px 6px;color:var(--green-text)">+ Add</button>`
-              : ''
-            }
             ${e.frequency > 0
               ? `<button class="ch-action-btn sr-hist-block" data-freq="${e.frequency}" data-label="${escHtml(e.name || '')}" title="Block/unblock in Smart Resume" style="font-size:11px;padding:2px 6px">⊘</button>`
               : ''
@@ -256,15 +238,6 @@ const History = (() => {
     }).join('');
 
     updatePagination(pages);
-
-    // Wire "Add to channel" buttons on discovery rows
-    tbody.querySelectorAll('.hist-add-ch').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const freq_mhz = parseFloat(btn.dataset.freq);
-        const mod      = btn.dataset.mod || 'FM';
-        Discovery.openAddChannel(freq_mhz, mod);
-      });
-    });
 
     // Wire Smart Resume block buttons
     tbody.querySelectorAll('.sr-hist-block').forEach(btn => {
@@ -348,8 +321,6 @@ const History = (() => {
     });
 
     console.log('[History] Initialised — using SQLite backend history');
-    // Init discovery toggle
-    if (window.Discovery) Discovery.init();
   }
 
   /* ── CSV Export ──────────────────────────────────────────────── */

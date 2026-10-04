@@ -2256,30 +2256,108 @@ kbd, .shortcuts-kbd {
 
 
 /* ═══════════════════════════════════════════
-   Discovery Mode
+   Discovery Inbox
    ═══════════════════════════════════════════ */
 
-/* Discovery row highlight */
-.hist-discovery-row td { background: rgba(59, 130, 246, 0.04); }
-.hist-discovery-row:hover td { background: rgba(59, 130, 246, 0.08); }
-
-/* Discovery badge in first column */
-.hist-disc-badge {
+/* Filter chips */
+.disc-filters { flex-wrap: wrap; gap: 6px; }
+.disc-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-control);
+  border: 0.5px solid var(--border-key);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
   font-size: 12px;
-  cursor: default;
-  user-select: none;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.disc-chip:hover { background: var(--bg-key-hover); color: var(--text-secondary); }
+.disc-chip.active {
+  background: var(--green-dim);
+  border-color: var(--green-muted);
+  color: var(--green-bright);
+}
+.disc-chip-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--bg-panel);
+  border-radius: 8px;
+  padding: 0 6px;
+  min-width: 14px;
+  text-align: center;
+  line-height: 16px;
 }
 
-/* Discovery count on toggle button — reuses lockout styles */
-#hist-discovery-toggle { margin-left: 8px; }
-#hist-discovery-toggle.active {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.4);
-  color: #93c5fd;
+/* Channel-cache warning strip */
+.disc-cache-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--amber) 10%, var(--bg-panel));
+  border: 0.5px solid var(--border);
+  border-top: none;
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 1.4;
 }
-#hist-discovery-toggle .ch-lockout-count {
-  background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
+.disc-cache-note[hidden] { display: none; }
+.disc-cache-note .key { flex-shrink: 0; }
+
+/* Rows */
+.disc-freq { font-family: var(--font-mono); white-space: nowrap; }
+.disc-hits { font-family: var(--font-mono); white-space: nowrap; }
+.disc-since {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--amber) 20%, transparent);
+  color: var(--amber);
+}
+.disc-row--watch td { background: color-mix(in srgb, var(--amber) 6%, transparent); }
+.disc-row--ignored td,
+.disc-row--added td { opacity: 0.7; }
+
+.disc-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.disc-actions .ch-action-btn { font-size: 11px; padding: 2px 7px; }
+.disc-actions .disc-primary { color: var(--green-text); }
+.disc-actions .disc-primary:hover { border-color: var(--green-muted); }
+
+/* Status badges — same shape as History badges */
+.disc-status {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 0.5px solid;
+  white-space: nowrap;
+}
+.disc-status--new     { color: var(--blue);  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
+                        background: color-mix(in srgb, var(--blue) 12%, transparent); }
+.disc-status--watch   { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+                        background: color-mix(in srgb, var(--amber) 12%, transparent); }
+.disc-status--blocked { color: var(--red);   border-color: color-mix(in srgb, var(--red) 40%, transparent);
+                        background: color-mix(in srgb, var(--red) 10%, transparent); }
+.disc-status--added   { color: var(--green-text); border-color: var(--green-muted); background: var(--green-dim); }
+.disc-status--muted   { color: var(--text-muted); border-color: var(--border-key); background: var(--bg-control); }
+
+/* Tab badge — blue so "new discoveries" reads differently from History's count */
+.disc-tab-badge {
+  background: color-mix(in srgb, var(--blue) 20%, transparent);
+  color: var(--blue);
+}
+.disc-tab-badge:empty { display: none; }
+
+#disc-slot-hint { min-height: 14px; }
+
+@media (max-width: 599px) {
+  .disc-cache-note { flex-direction: column; align-items: stretch; }
+  .disc-table { min-width: 720px; }
 }
 
 

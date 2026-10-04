@@ -26,9 +26,14 @@ Endpoints:
     GET  /api/history                   — SQLite-backed transmission history
     GET  /api/history/stats             — server-side history statistics
     GET  /api/recordings/index          — SQLite-backed recordings index
+    GET  /api/discoveries               — Discovery Inbox (grouped search hits)
+    POST /api/discoveries/status        — set watch / ignored / blocked / new
+    POST /api/discoveries/program       — program a discovery into a channel
+    POST /api/channels/cache/refresh    — read all 500 channels into the cache
 """
 
 import logging
+import re
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request
@@ -84,6 +89,24 @@ def scanner_required(f):
             return error("Scanner is not connected.", status=503)
         return f(*args, **kwargs)
     return wrapper
+
+
+def _cache_channels(channels: list[dict]) -> None:
+    """Best-effort update of the SQLite channel cache used by the Discovery Inbox."""
+    try:
+        from storage import cache_channels
+        cache_channels(channels)
+    except Exception as exc:
+        logger.warning("Could not update channel cache: %s", exc)
+
+
+def _invalidate_channels(channel_numbers: list[int]) -> None:
+    """Drop cache rows whose scanner contents are uncertain after a bulk write."""
+    try:
+        from storage import invalidate_channels
+        invalidate_channels(channel_numbers)
+    except Exception as exc:
+        logger.warning("Could not invalidate channel cache: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +491,7 @@ def export_channels_ss():
 
     scanner      = get_scanner()
     all_channels = scanner.get_all_channels_bulk()
+    _cache_channels(all_channels)
     ss_content   = _build_bc125at_ss(all_channels)
 
     return Response(
@@ -534,6 +558,7 @@ def import_channels_ss():
         })
 
     written, skipped, write_errors = scanner.set_channels_bulk(to_write)
+    _invalidate_channels([w["channel"] for w in to_write])
     all_errors = pre_errors + write_errors
 
     return success(
@@ -724,6 +749,7 @@ def get_channels():
     start = (bank - 1) * 50 + 1
     end   = bank * 50
     channels = get_scanner().get_channels_bulk(start, end)
+    _cache_channels(channels)
     return success({
         "bank":     bank,
         "start":    start,
@@ -759,6 +785,12 @@ def update_channel(ch: int):
     )
     if not ok:
         return error(f"Failed to write channel {ch}.")
+    _cache_channels([{
+        "channel":       ch,
+        "name":          str(body.get("name", ""))[:16].strip(),
+        "frequency_mhz": int(body.get("frequency_hz", 0)) / 1_000_000,
+        "modulation":    str(body.get("modulation", "FM")).upper(),
+    }])
     return success(message=f"Channel {ch} updated.")
 
 
@@ -906,6 +938,7 @@ def export_channels():
 
     scanner  = get_scanner()
     channels = scanner.get_all_channels_bulk()
+    _cache_channels(channels)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1023,6 +1056,7 @@ def import_channels():
 
     # Write all valid rows in a single program mode session
     written, skipped, write_errors = scanner.set_channels_bulk(to_write)
+    _invalidate_channels([w["channel"] for w in to_write])
     all_errors = pre_errors + write_errors
 
     return success(
@@ -1313,3 +1347,127 @@ def recordings_index():
 
     listings = index_recordings()
     return success({"recordings": listings, "count": len(listings)})
+
+
+# ---------------------------------------------------------------------------
+# Discovery Inbox
+# ---------------------------------------------------------------------------
+
+_CHANNEL_NAME_STRIP = re.compile(r"[^A-Za-z0-9 .\-/()#&+*!']")
+
+
+@scanner_bp.get("/discoveries")
+def discoveries_list():
+    """GET /api/discoveries — search-mode hits grouped by frequency, with status."""
+    from storage import list_discoveries
+
+    return success(list_discoveries())
+
+
+@scanner_bp.post("/discoveries/status")
+@admin_required
+def discoveries_set_status():
+    """
+    POST /api/discoveries/status
+    Body: { frequency_mhz, status }  status: new | watch | ignored | blocked
+    """
+    from storage import set_discovery_status
+    from storage.discoveries import SETTABLE_STATUSES
+
+    body = request.get_json(silent=True) or {}
+    status = str(body.get("status", ""))
+    try:
+        freq = float(body.get("frequency_mhz", 0))
+    except (TypeError, ValueError):
+        freq = 0
+    if freq <= 0:
+        return error("frequency_mhz is required.")
+    if status not in SETTABLE_STATUSES:
+        return error("Invalid status.", details=f"Valid: {', '.join(SETTABLE_STATUSES)}")
+
+    set_discovery_status(freq, status)
+    return success({"frequency_mhz": freq, "status": status},
+                   message=f"{freq:.4f} MHz marked {status}.")
+
+
+@scanner_bp.post("/discoveries/program")
+@admin_required
+@scanner_required
+def discoveries_program():
+    """
+    POST /api/discoveries/program — write a discovered frequency to a channel.
+    Body: { frequency_mhz, channel, name, modulation, delay, overwrite }
+
+    The target channel is re-read from the scanner first. If it already
+    holds a frequency the write is refused (409) unless overwrite is true,
+    so a stale cache can never silently clobber a programmed channel.
+    """
+    from scanner.commands import DELAY_VALUES, MODULATION_MODES
+    from storage import set_discovery_status
+
+    body = request.get_json(silent=True) or {}
+    try:
+        freq = float(body.get("frequency_mhz", 0))
+        ch = int(body.get("channel", 0))
+    except (TypeError, ValueError):
+        return error("frequency_mhz and channel must be numbers.")
+
+    freq_hz = round(freq * 1_000_000)
+    if not 25_000_000 <= freq_hz <= 512_000_000:
+        return error("Frequency out of range.", details="BC125AT covers 25–512 MHz.")
+    if not 1 <= ch <= 500:
+        return error("Channel out of range.", details="BC125AT supports channels 1–500.")
+
+    modulation = str(body.get("modulation", "FM")).upper()
+    if modulation not in MODULATION_MODES:
+        modulation = "FM"
+    delay = str(body.get("delay", "2"))
+    if delay not in DELAY_VALUES:
+        delay = "2"
+    # Commas would break the CIN command; keep to characters the scanner displays
+    name = _CHANNEL_NAME_STRIP.sub("", str(body.get("name", "")))[:16].strip()
+
+    scanner = get_scanner()
+    existing = scanner.get_channel_info(ch)
+    if existing is None:
+        return error(f"Could not read channel {ch} from the scanner.", status=502)
+    if existing.get("frequency_mhz", 0) > 0 and not body.get("overwrite"):
+        _cache_channels([existing])
+        return jsonify({
+            "success":  False,
+            "conflict": True,
+            "message":  (f"CH {ch} already holds {existing['frequency_mhz']:.4f} MHz"
+                         + (f" ({existing['name']})" if existing.get("name") else "") + "."),
+            "existing": existing,
+        }), 409
+
+    ok = scanner.set_channel(
+        channel=ch, name=name, freq_hz=freq_hz, modulation=modulation, delay=delay,
+    )
+    if not ok:
+        return error(f"Failed to write channel {ch}.")
+
+    _cache_channels([{"channel": ch, "name": name, "frequency_mhz": freq_hz / 1_000_000,
+                      "modulation": modulation}])
+    set_discovery_status(freq, "added", channel=ch)
+    return success(
+        {"channel": ch, "frequency_mhz": freq, "name": name, "modulation": modulation},
+        message=f"Programmed {freq:.4f} MHz into CH {ch}.",
+    )
+
+
+@scanner_bp.post("/channels/cache/refresh")
+@admin_required
+@scanner_required
+def channels_cache_refresh():
+    """
+    POST /api/channels/cache/refresh — read all 500 channels into the cache.
+    Puts the scanner in program mode for the duration (scanning pauses).
+    """
+    channels = get_scanner().get_all_channels_bulk()
+    if not channels:
+        return error("Could not read channels from the scanner.", status=502)
+    _cache_channels(channels)
+    empty = sum(1 for c in channels if c.get("frequency_mhz", 0) <= 0)
+    return success({"cached": len(channels), "empty": empty},
+                   message=f"Channel list loaded — {empty} empty slots.")

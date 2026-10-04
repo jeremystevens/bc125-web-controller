@@ -110,6 +110,21 @@ const Notifs = (() => {
     }
   }
 
+  // ── Custom notification (e.g. Discovery watch alerts) ───────────────
+  // Same permission / enabled checks as fire(); separate tag so it
+  // doesn't replace the "Active" notification.
+
+  function notify(title, body, tag = 'bc125at-custom') {
+    if (!hasPermission() || !enabled) return;
+    try {
+      const n = new Notification(title, { body, tag, silent: false });
+      setTimeout(() => { try { n.close(); } catch (_) {} }, NOTIF_DURATION);
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch (e) {
+      console.warn('Notification failed:', e);
+    }
+  }
+
   // ── State hook — called from applyStatus ────────────────────────────
 
   function onState(state) {
@@ -181,7 +196,7 @@ const Notifs = (() => {
     }
   }
 
-  return { init, onState };
+  return { init, onState, notify };
 })();
 
 /* Expose so main.js can call Notifs.onState(state) from applyStatus */

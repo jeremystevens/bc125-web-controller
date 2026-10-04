@@ -28,6 +28,9 @@
         <button class="tab-btn" data-tab="history">
           History <span class="hist-tab-badge" id="history-badge"></span>
         </button>
+        <button class="tab-btn" data-tab="discoveries">
+          Discoveries <span class="hist-tab-badge disc-tab-badge" id="disc-badge"></span>
+        </button>
         <button class="tab-btn" data-tab="status">Status</button>
       </nav>
       <div class="header-right">
@@ -61,6 +64,11 @@
     <!-- History tab -->
     <div class="tab-pane" id="tab-history">
       {% block history %}{% endblock %}
+    </div>
+
+    <!-- Discoveries tab -->
+    <div class="tab-pane" id="tab-discoveries">
+      {% block discoveries %}{% endblock %}
     </div>
 
     <!-- Status tab -->

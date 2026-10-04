@@ -51,6 +51,7 @@ function initSocket() {
     // Direct hooks for modules that need raw state regardless of applyStatus chain
     if (window.History)           History.onState(state);
     if (window.SmartResume)       SmartResume.onState(state);
+    if (window.Discovery)         Discovery.onState(state);
     if (window.applySessionRecState) applySessionRecState(state);
   });
 

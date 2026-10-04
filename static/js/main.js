@@ -241,6 +241,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialise Activity History
   if (window.History) window.History.init();
 
+  // Initialise Discovery Inbox
+  if (window.Discovery) window.Discovery.init();
+
   // Initialise Status page
   if (window.Status) window.Status.init();
 

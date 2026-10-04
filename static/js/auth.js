@@ -53,6 +53,8 @@ const Auth = (() => {
       '#sr-toggle', '#sr-block-btn', '#sr-clear-all', '#sr-manage-btn',
       // History
       '#hist-clear',
+      // Discovery Inbox
+      '.disc-action-btn', '#disc-load-channels', '#disc-modal-save',
       // Auto-record
       '.session-rec-toggle',
     ].join(', ');

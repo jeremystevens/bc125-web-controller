@@ -385,12 +385,8 @@ async function loadBank(bank) {
   // Update lockout count badge as more banks load
   if (window.Lockouts) Lockouts.updateCount();
 
-  // Re-run discovery tagging now that more channel data is available
-  if (window.Discovery && window.History) {
-    const pane = document.getElementById('tab-history');
-    if (pane && pane.classList.contains('active')) History.render();
-    else Discovery.updateBadge(History.entries || []);
-  }
+  // The server's channel cache was just updated — refresh the Discovery Inbox
+  if (window.Discovery) Discovery.refresh();
 }
 
 /* ── Render table ── */

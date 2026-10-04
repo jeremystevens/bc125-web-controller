@@ -258,14 +258,18 @@ def get_status(mgr: SerialManager) -> dict | None:
 def get_reception_status(mgr: SerialManager) -> dict | None:
     """
     GLG — Get reception status (unofficial).
-    Response: GLG,<freq_wire>,<mod>,<att>,<tone>,<grp_id>,<ch_id>,<name>,<sql>,<mute>
+    Response: GLG,<freq_wire>,<mod>,<att>,<tone>,<name1>,<name2>,<name3>,<sql>,<mute>,
+                  <sys_tag>,<chan_tag>,...
+    name3 is the channel name; chan_tag is the 1-based channel number and
+    is blank when not on a programmed channel (search mode) — verified
+    against the bearcat library's hardware tests.
     Wire frequency is in units of 100 Hz.
     """
     resp = _send_and_receive(mgr, "GLG")
     parts = _parse(resp)
     if not parts:
         return None
-    while len(parts) < 9:
+    while len(parts) < 11:
         parts.append("")
     wire_freq = _safe_int(parts[0], 0)
     freq_hz   = _wire_to_hz(wire_freq)
@@ -276,8 +280,8 @@ def get_reception_status(mgr: SerialManager) -> dict | None:
         "modulation":     parts[1].strip(),
         "attenuation":    parts[2].strip(),
         "ctcss_dcs_tone": parts[3].strip(),
-        "group_id":       parts[4].strip(),
-        "channel_id":     _safe_int(parts[5], 0),
+        "group_id":       parts[9].strip(),     # sys_tag
+        "channel_id":     _safe_int(parts[10], 0),
         "channel_name":   parts[6].strip(),
         "squelch_open":   parts[7].strip() == "1",
         "muted":          parts[8].strip() == "1",

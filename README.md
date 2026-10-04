@@ -89,6 +89,7 @@ Built on a **Python + Flask** backend with a **real-time WebSocket** frontend, i
 ◆  Live activity log with timestamps
 ◆  SQLite-backed shared transmission history across browsers
 ◆  Server-side recordings index with sidecar metadata support
+◆  Discovery Inbox — review unknown search hits, watch, block, or program them in one click
 ◆  Manual audio recording with 3-second tail capture
 ◆  Settings page — serial port, poll interval, scan groups, priority mode
 ◆  REST API — every feature accessible as a clean JSON endpoint (24+ endpoints)
@@ -245,6 +246,15 @@ All endpoints return a consistent JSON envelope:
 | `POST` | `/api/recordings/reindex` | Rescan recordings folder into SQLite |
 | `DELETE` | `/api/recordings/<filename>` | Delete a recording |
 
+### Discoveries
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/discoveries` | Search hits grouped by frequency, with status, empty slots and channel-cache info |
+| `POST` | `/api/discoveries/status` | Set a frequency to `new` / `watch` / `ignored` / `blocked` (admin) |
+| `POST` | `/api/discoveries/program` | Program a discovery into a channel; refuses occupied slots unless `overwrite` (admin) |
+| `POST` | `/api/channels/cache/refresh` | Read all 500 channels into the server cache — scanning pauses (admin) |
+
 ### History
 
 | Method | Endpoint | Description |
@@ -287,7 +297,8 @@ bc125-controller/
 │
 ├── storage/                   ← SQLite persistence package
 │   ├── db.py                  ← History + recordings tables and queries
-│   └── history_tracker.py     ← Server-side transmission detector
+│   ├── history_tracker.py     ← Server-side transmission detector
+│   └── discoveries.py         ← Discovery Inbox + channel cache
 │
 ├── api/                       ← Web layer (decoupled from hardware)
 │   ├── __init__.py
@@ -306,6 +317,7 @@ bc125-controller/
 │       ├── socket.js          ← SocketIO client · live push updates
 │       ├── tabs.js            ← Tab switching · lazy loading
 │       ├── channels.js        ← Channel manager · edit modal
+│       ├── discovery.js       ← Discovery Inbox tab · program-to-scanner dialog
 │       ├── settings.js        ← Settings page · scan groups · priority
 │       ├── notifications.js   ← Browser notifications · permission · toggle
 │       └── themes.js          ← Theme switcher · 5 radio-inspired themes
@@ -354,7 +366,7 @@ bc125-controller/
 ◇  ~~Channel Memory Editor~~          — ✅ shipped in v0.7.0 (CSV export/import)
 ◇  Favorites Manager              — tag and group channels across banks
 ◇  ~~Search Range Programming~~       — ✅ shipped in v0.7.16
-◇  Discovery Mode                 — log and display all active frequencies
+◇  ~~Discovery Mode~~                 — ✅ shipped in v0.9.0 (Discovery Inbox)
 ◇  Scanner Audio Streaming        — stream scanner audio to the browser tab
 ◇  Session Recording              — auto-record entire sessions with activity index
 ◇  ~~Browser Notifications~~          — ✅ shipped in v0.6.2

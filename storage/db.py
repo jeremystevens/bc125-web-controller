@@ -60,6 +60,26 @@ CREATE INDEX IF NOT EXISTS idx_recordings_created
     ON recordings(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_recordings_frequency
     ON recordings(frequency_mhz);
+
+-- Server copy of the scanner's programmed channels. Filled whenever
+-- channels are read or written through the API (reading all 500 needs
+-- program mode, which pauses scanning, so it is never done implicitly).
+CREATE TABLE IF NOT EXISTS channel_cache (
+    channel INTEGER PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    frequency_mhz REAL NOT NULL DEFAULT 0,
+    modulation TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
+
+-- User decisions in the Discovery Inbox, keyed by frequency.
+-- status: watch | ignored | blocked | added  (no row = new)
+CREATE TABLE IF NOT EXISTS discovery_status (
+    frequency_mhz REAL PRIMARY KEY,
+    status TEXT NOT NULL,
+    channel INTEGER,
+    updated_at TEXT NOT NULL
+);
 """
 
 
