@@ -5,9 +5,14 @@ All other modules import from here — never read os.environ directly elsewhere.
 """
 
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Project root — relative data paths resolve against this, not the CWD
+BASE_DIR = Path(__file__).resolve().parent
 
 
 class Config:
@@ -25,6 +30,9 @@ class Config:
 
     # ── Recordings ────────────────────────────────────────────────────
     RECORDINGS_DIR: str = os.getenv("RECORDINGS_DIR", "recordings")
+
+    # ── Storage ───────────────────────────────────────────────────────
+    DATA_DIR: str = os.getenv("DATA_DIR", "data")   # SQLite database folder
 
 
 config = Config()

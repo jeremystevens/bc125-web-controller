@@ -566,6 +566,7 @@ def history_list():
 
 
 @scanner_bp.post("/history/import")
+@admin_required
 def history_import():
     """POST /api/history/import — best-effort migration from browser localStorage."""
     from storage import import_transmissions
@@ -589,6 +590,7 @@ def history_clear():
 
 
 @scanner_bp.post("/history/mark-current-skipped")
+@admin_required
 def history_mark_current_skipped():
     """POST /api/history/mark-current-skipped — mark current/recent transmission skipped."""
     body = request.get_json(silent=True) or {}
@@ -600,7 +602,9 @@ def history_mark_current_skipped():
 
     tracker = getattr(current_app, "history_tracker", None)
     marked = tracker.mark_current_skipped(freq) if tracker else False
-    return success({"marked_existing": bool(marked)}, message="Transmission marked skipped.")
+    if not marked:
+        return success({"marked": False}, message="No matching transmission to mark.")
+    return success({"marked": True}, message="Transmission marked skipped.")
 
 
 @scanner_bp.get("/history/stats")

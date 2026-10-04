@@ -1,8 +1,8 @@
 # Version
 
-Current release: **0.8.0**
+Current release: **0.8.1**
 
-## 0.8.0 — SQLite History and Recordings Index
+## 0.8.1 — History Fixes and Login Hardening
 
 Latest documented release in `CHANGELOG.md`.
 

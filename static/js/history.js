@@ -1,56 +1,63 @@
 /* BC125AT Web Controller — history.js
-   Persistent activity history.
+   Activity history view, backed by the server's SQLite history.
 
-   TRACKING STRATEGY: frequency stability, not squelch_open.
+   Transmission detection runs server-side (storage/history_tracker.py):
+   a stop of >= 0.8s on one frequency is logged when the frequency
+   changes. This module only loads, filters, renders and exports that
+   shared history, so every browser sees the same entries.
 
-   The BC125AT only sets squelch_open=true when audio actually breaks
-   through the squelch threshold. During scanning, the scanner stops on
-   a channel briefly to check it — squelch_open may never be true even
-   though the scanner DID stop there.
+   Timestamps from the API are UTC ISO-8601 strings ending in "Z".
 
-   Instead we track: when the scanner stops on a frequency for >= 0.8s,
-   that counts as a transmission event. When frequency changes, we log
-   the previous stop with its duration.
-
-   This works at any squelch level.
+   localStorage 'bc125at_history' is just a cache for the heatmaps.
+   Pre-0.8.0 browser history is imported once (admin only) — see
+   migrateLocalStorage().
 */
 
 const History = (() => {
 
   const STORAGE_KEY    = 'bc125at_history';
   const MIGRATION_KEY  = 'bc125at_history_migrated_sqlite';
-  const MAX_ENTRIES    = 500;
+  const PENDING_KEY    = 'bc125at_history_pending_import';
+  const MAX_ENTRIES    = 1000;   // newest entries loaded from the backend
   const PAGE_SIZE      = 50;
-  const MIN_DWELL_MS   = 800;    // ignore stops shorter than 800ms (scanning blip)
 
   let entries     = [];
   let filterText  = '';
   let currentPage = 1;
   let lastRefresh = 0;
 
-  // Frequency tracking state
-  let dwellFreq   = null;   // frequency currently dwelling on
-  let dwellStart  = null;   // when we started dwelling
-  let dwellState  = null;   // full state snapshot when dwell started
-
   /* ── Persistence ─────────────────────────────────────────────── */
 
+  /* One-time import of pre-0.8.0 browser history. The original entries
+     are copied to PENDING_KEY first, because STORAGE_KEY is overwritten
+     with the backend cache on every load. Import needs admin, so a guest
+     keeps the pending copy until an admin opens the app in this browser.
+     Uses plain fetch so a guest's 401 doesn't redirect to the login page. */
   async function migrateLocalStorage() {
     try {
       if (localStorage.getItem(MIGRATION_KEY) === '1') return;
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const oldEntries = raw ? JSON.parse(raw) : [];
+      let raw = localStorage.getItem(PENDING_KEY);
+      if (raw === null) {
+        raw = localStorage.getItem(STORAGE_KEY) || '[]';
+        localStorage.setItem(PENDING_KEY, raw);
+      }
+      const oldEntries = JSON.parse(raw);
       if (Array.isArray(oldEntries) && oldEntries.length > 0) {
-        await apiFetch('/api/history/import', 'POST', { entries: oldEntries });
+        const res = await fetch('/api/history/import', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ entries: oldEntries }),
+        });
+        if (!res.ok) return;   // retry on a later page load
       }
       localStorage.setItem(MIGRATION_KEY, '1');
+      localStorage.removeItem(PENDING_KEY);
     } catch (_) {}
   }
 
   async function load() {
-    await migrateLocalStorage();
     try {
-      const res = await apiFetch('/api/history?limit=1000');
+      const res = await apiFetch(`/api/history?limit=${MAX_ENTRIES}`);
       entries = res.success ? (res.data.entries || []) : [];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
       console.log('[History] Loaded', entries.length, 'entries from SQLite backend');
@@ -96,23 +103,11 @@ const History = (() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); } catch (_) {}
   }
 
-  function addEntry(entry) {
-    entries.unshift(entry);
-    if (entries.length > MAX_ENTRIES) entries = entries.slice(0, MAX_ENTRIES);
-    save();
-    console.log('[History] Entry added:', entry.frequency, 'MHz', entry.duration + 's');
-    renderIfVisible();
-    updateBadge();
-    // Update mini heatmap on dashboard
-    if (window.MiniHeatmap) MiniHeatmap.render();
-  }
-
   /* ── State tracking ──────────────────────────────────────────── */
 
   function onState(state) {
-    // Transmission detection now runs server-side in storage/history_tracker.py
-    // so every browser shares the same SQLite-backed history without duplicates.
-    // Refresh lightly so the badge/history/heatmap catch up while the app is open.
+    // Detection runs server-side; just refresh periodically so the
+    // badge, history table and mini heatmap catch up while the app is open.
     const now = Date.now();
     if (now - lastRefresh < 15000) return;
     lastRefresh = now;
@@ -123,16 +118,18 @@ const History = (() => {
     });
   }
 
-  /* Smart Resume marks the last entry as skipped */
-  async function markLastSkipped() {
-    if (entries.length > 0) {
-      entries[0].skipped = true;
-      save();
-      renderIfVisible();
-    }
+  /* Smart Resume skipped the transmission on freq_mhz. The server marks
+     the in-progress dwell (or one saved a moment ago) — never an older
+     row. Plain fetch: a guest's 401 is ignored instead of redirecting. */
+  async function markSkipped(freq_mhz) {
     try {
-      const freq = entries[0]?.frequency || 0;
-      await apiFetch('/api/history/mark-current-skipped', 'POST', { frequency_mhz: freq });
+      const res = await fetch('/api/history/mark-current-skipped', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ frequency_mhz: freq_mhz || 0 }),
+      });
+      const data = await res.json();
+      if (data.success && data.data?.marked) refresh();
     } catch (_) {}
   }
 
@@ -305,7 +302,7 @@ const History = (() => {
   /* ── Init ────────────────────────────────────────────────────── */
 
   function init() {
-    load().then(() => {
+    migrateLocalStorage().then(load).then(() => {
       updateBadge();
       renderIfVisible();
       matchRecordings();
@@ -394,7 +391,7 @@ const History = (() => {
     render();
   }
 
-  const History = { init, onState, markLastSkipped, render, refresh, matchRecordings,
+  const History = { init, onState, markSkipped, render, refresh, matchRecordings,
                    get entries() { return entries; } };
   return History;
 

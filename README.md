@@ -24,7 +24,6 @@
 
 ![Python CI](https://img.shields.io/github/actions/workflow/status/yourusername/bc125at-web-controller/python-ci.yml?style=for-the-badge&label=Python%20CI&logo=github-actions&logoColor=white&labelColor=111315&color=4ade80)
 ![CodeQL](https://img.shields.io/github/actions/workflow/status/yourusername/bc125at-web-controller/codeql.yml?style=for-the-badge&label=CodeQL&logo=github&logoColor=white&labelColor=111315&color=4ade80)
-![Code Quality](https://img.shields.io/github/actions/workflow/status/yourusername/bc125at-web-controller/lint.yml?style=for-the-badge&label=Code%20Quality&logo=pylint&logoColor=white&labelColor=111315&color=4ade80)
 ![Dependabot](https://img.shields.io/badge/Dependabot-Enabled-4ade80?style=for-the-badge&logo=dependabot&logoColor=white&labelColor=111315)
 
 </div>

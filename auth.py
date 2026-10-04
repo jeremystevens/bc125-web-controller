@@ -14,7 +14,7 @@ import time
 from functools import wraps
 
 from flask import (
-    Blueprint, jsonify, make_response, request,
+    Blueprint, jsonify, make_response, redirect, request,
     render_template_string, current_app
 )
 from config import config
@@ -194,16 +194,30 @@ LOGIN_HTML = """
 """
 
 
+def _safe_next(url: str | None) -> str:
+    """
+    Only allow same-site relative paths as a post-login redirect.
+    Rejects absolute/protocol-relative URLs, javascript: URLs, backslashes
+    and control characters (browsers strip tabs/newlines, so "/<tab>/evil.com"
+    would otherwise become "//evil.com").
+    """
+    if not url or not url.startswith("/") or url.startswith("//"):
+        return "/"
+    if "\\" in url or any(ord(c) < 32 or ord(c) == 127 for c in url):
+        return "/"
+    return url
+
+
 @auth_bp.get("/login")
 def login_page():
-    next_url = request.args.get("next", "/")
+    next_url = _safe_next(request.args.get("next"))
     return render_template_string(LOGIN_HTML, error=None, next=next_url)
 
 
 @auth_bp.post("/login")
 def login_submit():
     password  = request.form.get("password", "")
-    next_url  = request.form.get("next", "/")
+    next_url  = _safe_next(request.form.get("next"))
     expected  = config.ADMIN_PASSWORD
 
     if not expected:
@@ -211,18 +225,14 @@ def login_submit():
         resp = make_response(jsonify({"success": True}))
         return resp
 
-    if password != expected:
+    if not hmac.compare_digest(password.encode(), expected.encode()):
         return render_template_string(LOGIN_HTML, error="Incorrect password.", next=next_url)
 
     # Set 7-day signed cookie
     secret = config.SECRET_KEY + expected
     token  = _make_token(secret)
 
-    resp = make_response(
-        render_template_string("""
-        <script>window.location = {{ next|tojson }};</script>
-        """, next=next_url)
-    )
+    resp = make_response(redirect(next_url))
     resp.set_cookie(
         COOKIE_NAME, token,
         max_age=COOKIE_MAX_AGE,

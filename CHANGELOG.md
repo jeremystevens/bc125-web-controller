@@ -7,6 +7,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.8.1] — History Fixes and Login Hardening
+
+### Fixed
+- History sorted out of order: imported browser entries were stored in UTC (`...Z`) but server-tracked entries in naive local time, so text ordering mixed them. All timestamps are now stored as UTC ISO-8601 with milliseconds and a `Z` suffix, and existing rows are converted automatically on startup.
+- The transmission in progress when the server shuts down is now saved (`TransmissionTracker.flush()`).
+- Smart Resume skip marking could flag an older, unskipped transmission on the same frequency. It now marks only the in-progress dwell, or the dwell saved within the last 5 seconds if the scanner already moved on. The frontend sends the frequency that was actually skipped instead of the newest history row's frequency.
+- `POST /api/history/import` and `POST /api/history/mark-current-skipped` now require admin.
+- One-time localStorage history migration no longer discards a guest's old history on a 401 — the entries are kept and imported the next time an admin opens the app in that browser.
+- Login `next` redirect is restricted to same-site relative paths (blocks `javascript:` URLs and open redirects); the password check uses a constant-time comparison.
+
+### Changed
+- SQLite location is configurable via `DATA_DIR` (default `data`), resolved against the project folder instead of the current working directory.
+- `storage.mark_last_transmission_skipped()` replaced by `mark_transmission_skipped(row_id)`.
+- `History.markLastSkipped()` replaced by `History.markSkipped(freq_mhz)`.
+- Removed unused browser-side dwell tracking code from `history.js`; it now loads up to 1000 entries.
+- `pyproject.toml` targets Python 3.10, matching the README.
+
+### Removed
+- README badge for the deleted `lint.yml` workflow.
+
+---
+
 ## [0.8.0] — SQLite History and Recordings Index
 
 ### Added

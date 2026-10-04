@@ -2,13 +2,15 @@
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config import config
+from config import BASE_DIR, config
 
-DATA_DIR = Path("data")
+DATA_DIR = Path(config.DATA_DIR)
+if not DATA_DIR.is_absolute():
+    DATA_DIR = BASE_DIR / DATA_DIR
 DB_PATH = DATA_DIR / "bc125at.db"
 
 
@@ -68,10 +70,56 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _format_utc(dt: datetime) -> str:
+    """Format as UTC ISO-8601 with milliseconds and a Z suffix (matches JS toISOString)."""
+    return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def utc_now_iso() -> str:
+    return _format_utc(datetime.now(timezone.utc))
+
+
+def to_utc_iso(value: Any) -> str | None:
+    """
+    Normalise a timestamp to UTC ISO-8601 with a Z suffix.
+
+    Naive timestamps are treated as server local time. Every stored
+    timestamp uses this one format so string ordering matches time order.
+    Returns None if the value cannot be parsed.
+    """
+    if not value:
+        return None
+    text = str(value).strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"   # fromisoformat() only accepts Z from 3.11
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.astimezone()          # assume server local time
+    return _format_utc(dt)
+
+
+def _normalise_stored_timestamps(conn: sqlite3.Connection) -> None:
+    """Convert any rows not yet in the canonical UTC format (one-time migration)."""
+    rows = conn.execute("SELECT id, timestamp FROM transmissions").fetchall()
+    for row in rows:
+        ts = to_utc_iso(row["timestamp"])
+        if ts is None or ts == row["timestamp"]:
+            continue
+        try:
+            conn.execute("UPDATE transmissions SET timestamp = ? WHERE id = ?", (ts, row["id"]))
+        except sqlite3.IntegrityError:
+            # Same transmission already stored in UTC form — drop the duplicate
+            conn.execute("DELETE FROM transmissions WHERE id = ?", (row["id"],))
+
+
 def init_db() -> None:
     """Create the SQLite database and tables if needed."""
     with _connect() as conn:
         conn.executescript(SCHEMA)
+        _normalise_stored_timestamps(conn)
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
@@ -84,7 +132,7 @@ def _normalise_transmission(entry: dict[str, Any]) -> dict[str, Any]:
     duration = entry.get("duration", entry.get("duration_s", 0))
 
     return {
-        "timestamp": str(entry.get("timestamp") or datetime.now().isoformat()),
+        "timestamp": to_utc_iso(entry.get("timestamp")) or utc_now_iso(),
         "frequency_mhz": float(entry.get("frequency", entry.get("frequency_mhz", 0)) or 0),
         "channel_id": int(channel or 0),
         "channel_name": str(name or ""),
@@ -172,28 +220,10 @@ def clear_transmissions() -> int:
         return cur.rowcount
 
 
-def mark_last_transmission_skipped(frequency_mhz: float | None = None) -> bool:
-    """Mark the most recent matching transmission skipped."""
-    params: list[Any] = []
-    where = ""
-    if frequency_mhz and frequency_mhz > 0:
-        where = "WHERE ABS(frequency_mhz - ?) <= 0.005"
-        params.append(float(frequency_mhz))
-
+def mark_transmission_skipped(row_id: int) -> bool:
+    """Mark one stored transmission skipped by id."""
     with _connect() as conn:
-        cur = conn.execute(
-            f"""
-            UPDATE transmissions
-            SET skipped = 1
-            WHERE id = (
-                SELECT id FROM transmissions
-                {where}
-                ORDER BY timestamp DESC
-                LIMIT 1
-            )
-            """,
-            params,
-        )
+        cur = conn.execute("UPDATE transmissions SET skipped = 1 WHERE id = ?", (row_id,))
         return cur.rowcount > 0
 
 

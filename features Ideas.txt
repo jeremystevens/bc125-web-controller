@@ -1,0 +1,447 @@
+BC125AT Web Controller — Feature Ideas
+======================================
+
+This list is based on the current project: Flask + SocketIO scanner control, channel manager, recordings, live audio, history, favorites, discovery mode, Smart Resume, themes, and status/heatmap pages.
+
+
+High-impact features
+--------------------
+
+1. Recording playback library upgrade
+
+Right now recordings are listed, downloadable, and matched to history. This could become a proper media library.
+
+Ideas:
+- Inline waveform/player
+- Play/pause directly in Dashboard or History
+- Filter by date, frequency, channel, duration
+- Delete multiple recordings
+- Rename recordings
+- Add notes/tags
+- Download all recordings for a day/channel
+- Auto-delete after X days or when folder exceeds X GB
+
+Why it matters:
+This would make the recording system feel much more complete and useful.
+
+
+2. Persistent backend history database
+
+History currently lives in browser localStorage. That means each browser has separate history, and clearing browser data loses everything.
+
+A lightweight SQLite database would unlock:
+- Shared history across devices
+- Long-term stats
+- Server-side search/filtering
+- Reliable discovery tracking
+- Server-side recording/history matching
+- Date-range exports
+- Better Status page metrics
+
+Why it matters:
+This is probably one of the strongest architectural upgrades because many other features could build on it.
+
+
+3. Scanner profiles / channel sets
+
+Users could save different 500-channel configurations.
+
+Examples:
+- Home
+- Airband
+- Railroad
+- Public Safety
+- Travel
+- Event Monitoring
+
+Ideas:
+- Backup current scanner to profile
+- Restore profile to scanner
+- Clone/edit profiles offline
+- Compare profile vs scanner
+- Import/export profile as JSON, CSV, or .bc125at_ss
+
+Why it matters:
+This fits naturally with the existing channel import/export system.
+
+
+4. Better Discovery Mode workflow
+
+Discovery mode already flags unknown search hits. The next step is turning it into a real frequency inbox.
+
+Ideas:
+- Dedicated Discoveries table
+- Group duplicate hits by frequency
+- Show hit count, first heard, last heard
+- Show modulation, duration, and sample recording if available
+- Mark discoveries as:
+  - Ignore
+  - Add to channel
+  - Watch
+  - Smart Resume block
+- Auto-suggest empty channel slots
+- One-click “Program to scanner”
+
+Why it matters:
+This could become one of the project’s killer features.
+
+
+5. Scheduled recording / monitoring sessions
+
+Add scheduler rules for automated monitoring.
+
+Ideas:
+- Record only during certain hours
+- Record only certain channels/frequencies
+- Enable/disable banks on schedule
+- Run search mode overnight
+- Export daily activity summary
+
+Examples:
+- Auto-record airband from 8am–6pm
+- Enable railroad bank at night
+- Search custom range 450–470 MHz for 2 hours
+
+
+6. Multi-device/mobile polish
+
+The app is already responsive, but it could become more phone/tablet friendly.
+
+Ideas:
+- Installable PWA
+- Home-screen icon
+- Keep-screen-awake toggle
+- Vibration on transmission
+- Compact mobile remote-control mode
+- Landscape scanner dashboard
+- Offline cached UI shell
+- Full-screen dashboard mode
+
+Why it matters:
+This would make the app feel like a real scanner remote on mobile.
+
+
+Smart / automation ideas
+------------------------
+
+7. Rule engine
+
+A simple IF/THEN automation layer.
+
+Examples:
+- IF frequency is 162.5500 THEN notify
+- IF channel name contains Fire THEN auto-record
+- IF signal lasts over 30 seconds THEN log as “long transmission”
+- IF frequency is in blocklist THEN resume scan
+- IF battery low THEN browser notification
+- IF channel is priority THEN play alert sound
+
+Implementation idea:
+Start simple with JSON/localStorage rules, then later move to backend-persisted rules.
+
+
+8. Priority watchlist
+
+Separate from scanner priority mode, users could mark important channels/frequencies as “watched.”
+
+Ideas:
+- Dashboard highlights when a watched channel is heard
+- Browser notification uses special title/sound
+- History filter: watched only
+- Stats for watched channels
+- Optional auto-record watched only
+
+Why it matters:
+This pairs well with favorites, but serves a different purpose.
+
+
+9. Per-channel notes and labels
+
+Let users enrich channel data beyond what the scanner itself stores.
+
+Ideas:
+- Long description
+- Agency
+- Location
+- Category
+- Color
+- Tags
+- Notes
+- Links
+- Service type: police, fire, air, rail, weather, business, ham, marine, etc.
+
+Why it matters:
+BC125AT channel names are short, so app-side metadata would be useful.
+
+
+10. Activity alerts / sounds
+
+Browser notifications exist, but the app could add richer in-app alerts.
+
+Ideas:
+- Beep on active transmission
+- Custom alert sound per channel/tag
+- Flash browser tab title
+- Dashboard “Now Heard” banner
+- Do-not-disturb quiet hours
+- Notification cooldowns
+
+
+UI / UX improvements
+--------------------
+
+11. Command macro buttons
+
+Let users create custom buttons that send sequences.
+
+Examples:
+- Start custom search
+- Hold → enter channel → scan
+- Toggle priority + scan
+- Go to favorite bank
+
+Note:
+This would need to respect what the BC125AT protocol can actually do, but key-sequence macros could still be useful.
+
+
+12. Bank dashboard
+
+A visual grid of all 10 banks.
+
+Ideas:
+- Enabled/disabled state
+- Number of programmed channels
+- Number locked out
+- Recent hits per bank
+- One-click enable/disable
+- Bank activity sparkline
+
+Why it matters:
+This would make scan-group management much clearer.
+
+
+13. Channel conflict / quality checker
+
+Analyze programmed channels for issues.
+
+Ideas:
+- Duplicate frequencies
+- Invalid/empty names
+- Channels with no delay
+- Locked-out priority channels
+- Unused channels
+- Frequencies outside expected service ranges
+- Duplicate names
+- Suspicious modulation choices
+
+Possible name:
+Scanner Health / Channel Plan Audit
+
+
+14. Better import preview
+
+Before writing CSV or .bc125at_ss files to the scanner, show a preview.
+
+Ideas:
+- Show parsed rows
+- Show validation errors
+- Show diff vs current scanner
+- Choose “write all” or “changed only”
+- Dry-run mode
+- Download rejected rows as CSV
+
+Why it matters:
+This makes imports safer and more trustworthy.
+
+
+Radio-specific ideas
+--------------------
+
+15. Frequency service lookup
+
+Given a frequency, classify the likely radio service.
+
+Examples:
+- Airband
+- NOAA
+- VHF public safety
+- UHF business
+- Amateur 2m/70cm
+- Railroad
+- Marine
+- GMRS/FRS-ish ranges
+
+Could be used in:
+- History
+- Discovery mode
+- Heatmaps
+- Channel editor hints
+- Search/filtering
+
+Note:
+This can be done offline with built-in band tables.
+
+
+16. NOAA / weather tools
+
+Even if the WX key is not supported over serial, the app can still help with weather monitoring.
+
+Ideas:
+- Store NOAA weather channel frequencies
+- Quick-jump to local NOAA channel if programmed
+- Weather alert dashboard card
+- Label NOAA channels automatically
+- Recommend programming local NOAA frequencies
+
+
+17. Custom search presets
+
+Search ranges already exist. Add preset templates.
+
+Possible presets:
+- Airband
+- MilAir
+- Railroad
+- Marine
+- VHF public safety
+- UHF public safety
+- Ham 2m
+- Ham 70cm
+- GMRS/FRS
+
+Workflow:
+User selects preset → app fills lower/upper search range fields.
+
+
+18. Signal/activity analytics by frequency band
+
+The heatmap is already a good start. Add more analytics.
+
+Ideas:
+- Top bands today
+- Quietest/loudest hour
+- Most active unknowns
+- Activity timeline
+- Compare today vs yesterday
+- Alert if scanner heard nothing for X minutes
+
+
+Advanced / ambitious ideas
+--------------------------
+
+19. Multi-scanner support
+
+Manage more than one scanner from one app.
+
+Ideas:
+- Multiple serial ports
+- One dashboard per scanner
+- Combined history
+- Scanner labels
+- Independent recordings
+- Split-screen monitoring
+
+Note:
+This would require a bigger refactor because the current app assumes one global scanner and one recorder.
+
+
+20. Remote-safe deployment mode
+
+The project is mostly designed for local/LAN use. A remote-safe mode would harden it for exposure outside the home network.
+
+Ideas:
+- Admin required for all control actions
+- Read-only guest mode
+- CSRF protection
+- Secure cookie option
+- HTTPS proxy guidance
+- Trusted-origin config
+- Rate limiting for mutating endpoints
+
+
+21. Plugin-style command/debug console
+
+For power users and troubleshooting.
+
+Ideas:
+- Raw command send box
+- Response viewer
+- Command history
+- Safe/read-only mode
+- Protocol documentation links
+- Diagnostic export bundle
+
+Why it matters:
+Useful for debugging scanner communication and discovering protocol quirks.
+
+
+22. AI-assisted labeling / summaries
+
+Could start with local heuristics first, no cloud required.
+
+Ideas:
+- Infer likely service/category from frequency range
+- Suggest channel names based on repeated unknowns
+- Summarize daily activity:
+  - Most active frequency
+  - New unknowns found
+  - Total recordings
+  - Total recorded duration
+- Generate CSV channel-plan suggestions from discovered frequencies
+
+
+Top 5 recommended priorities
+----------------------------
+
+If prioritizing for this project, these are the strongest next steps:
+
+1. Backend SQLite history + recordings index
+   Foundation for better stats, discovery, search, and multi-browser use.
+
+2. Discovery Inbox
+   Turns existing discovery mode into a real workflow.
+
+3. Import preview/diff before writing scanner
+   Big safety and trust improvement.
+
+4. Recording library upgrade
+   Makes auto-recording genuinely useful.
+
+5. Profiles / channel plans
+   Great power-user feature and natural fit for import/export.
+
+
+Possible feature bundles
+------------------------
+
+Bundle A — “Data Foundation”
+- SQLite history
+- Server-side recordings index
+- Recording/history matching
+- Status page uses backend history
+
+Bundle B — “Discovery Pro”
+- Discovery Inbox
+- Hit counts
+- Ignore/add/watch/block actions
+- Empty-channel suggestions
+
+Bundle C — “Safe Channel Management”
+- Import preview
+- Diff vs scanner
+- Changed-only write
+- Channel conflict checker
+- Profiles/channel sets
+
+Bundle D — “Better Listening Experience”
+- Recording library
+- Inline player
+- Watchlist alerts
+- Per-channel sounds
+- PWA/mobile polish
+
+Bundle E — “Power User Tools”
+- Raw command console
+- Macros
+- Rule engine
+- Advanced search presets

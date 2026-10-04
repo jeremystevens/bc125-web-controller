@@ -9,7 +9,7 @@ from .db import (
     index_recordings,
     list_recordings_index,
     list_transmissions,
-    mark_last_transmission_skipped,
+    mark_transmission_skipped,
 )
 from .history_tracker import TransmissionTracker
 
@@ -23,5 +23,5 @@ __all__ = [
     "index_recordings",
     "list_recordings_index",
     "list_transmissions",
-    "mark_last_transmission_skipped",
+    "mark_transmission_skipped",
 ]

@@ -108,9 +108,10 @@ const SmartResume = (() => {
   async function sendResume() {
     const inSearch = lastState && lastState.channel_id === 0;
     const key      = inSearch ? 'search' : 'scan';
+    const freq     = lastState?.frequency_mhz || 0;   // capture before the scanner moves on
     try {
       await fetch(`/api/key/${key}`, { method: 'POST' });
-      if (window.History) History.markLastSkipped();
+      if (window.History) History.markSkipped(freq);
     } catch (e) {
       console.warn('[SmartResume] Resume key failed:', e.message);
     }

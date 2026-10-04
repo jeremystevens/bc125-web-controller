@@ -146,3 +146,4 @@ if __name__ == "__main__":
         )
     finally:
         scanner.disconnect()
+        history_tracker.flush()   # save the transmission still in progress
